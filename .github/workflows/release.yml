@@ -83,19 +83,19 @@ jobs:
 
     steps:
     - name: Download API artifact
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v6
       with:
         name: framework-api
         path: ./api
 
     - name: Download Admin artifact
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v6
       with:
         name: framework-admin
         path: ./admin
 
     - name: Download CodeGen artifact
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v6
       with:
         name: framework-codegen
         path: ./nupkg
