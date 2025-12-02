@@ -1,5 +1,11 @@
 # Framework
 
+[![CI](https://github.com/rajenderkundhuri/framework/actions/workflows/ci.yml/badge.svg)](https://github.com/rajenderkundhuri/framework/actions/workflows/ci.yml)
+[![.NET](https://img.shields.io/badge/.NET-9.0-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![codecov](https://codecov.io/gh/rajenderkundhuri/framework/graph/badge.svg)](https://codecov.io/gh/rajenderkundhuri/framework)
+[![GitHub release](https://img.shields.io/github/v/release/rajenderkundhuri/framework?include_prereleases)](https://github.com/rajenderkundhuri/framework/releases)
+
 A modern, enterprise-grade application framework built with .NET 9.0, featuring a Blazor WebAssembly Admin Panel. Follows Clean Architecture principles and Domain-Driven Design (DDD) patterns.
 
 ## Overview

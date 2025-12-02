@@ -1,0 +1,128 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 1.0.0)'
+        required: true
+        type: string
+
+env:
+  DOTNET_VERSION: '9.0.x'
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_NOLOGO: true
+
+jobs:
+  build:
+    name: Build Release
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+
+    - name: Cache NuGet packages
+      uses: actions/cache@v4
+      with:
+        path: ~/.nuget/packages
+        key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+        restore-keys: |
+          ${{ runner.os }}-nuget-
+
+    - name: Restore dependencies
+      run: dotnet restore
+
+    - name: Build
+      run: dotnet build --configuration Release --no-restore
+
+    - name: Test
+      run: dotnet test --configuration Release --no-build --verbosity normal
+
+    - name: Publish API
+      run: dotnet publish src/Framework.Api/Framework.Api.csproj -c Release -o ./publish/api --no-build
+
+    - name: Publish Admin
+      run: dotnet publish src/Framework.Admin/Framework.Admin.csproj -c Release -o ./publish/admin --no-build
+
+    - name: Pack CodeGen Tool
+      run: dotnet pack src/Framework.CodeGen/Framework.CodeGen.csproj -c Release -o ./publish/nupkg --no-build
+
+    - name: Upload API artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: framework-api
+        path: ./publish/api
+
+    - name: Upload Admin artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: framework-admin
+        path: ./publish/admin
+
+    - name: Upload CodeGen NuGet package
+      uses: actions/upload-artifact@v4
+      with:
+        name: framework-codegen
+        path: ./publish/nupkg
+
+  create-release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+    - name: Download API artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: framework-api
+        path: ./api
+
+    - name: Download Admin artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: framework-admin
+        path: ./admin
+
+    - name: Download CodeGen artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: framework-codegen
+        path: ./nupkg
+
+    - name: Create archives
+      run: |
+        cd api && zip -r ../framework-api.zip . && cd ..
+        cd admin && zip -r ../framework-admin.zip . && cd ..
+
+    - name: Get version
+      id: version
+      run: |
+        if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+          echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
+        else
+          echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref }}
+        name: Release ${{ steps.version.outputs.version }}
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+        files: |
+          framework-api.zip
+          framework-admin.zip
+          nupkg/*.nupkg

@@ -1,0 +1,132 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master, develop ]
+  workflow_dispatch:
+
+env:
+  DOTNET_VERSION: '9.0.x'
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_NOLOGO: true
+
+jobs:
+  build:
+    name: Build & Test
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+
+    - name: Cache NuGet packages
+      uses: actions/cache@v4
+      with:
+        path: ~/.nuget/packages
+        key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+        restore-keys: |
+          ${{ runner.os }}-nuget-
+
+    - name: Restore dependencies
+      run: dotnet restore
+
+    - name: Build
+      run: dotnet build --configuration Release --no-restore
+
+    - name: Test
+      run: dotnet test --configuration Release --no-build --verbosity normal --collect:"XPlat Code Coverage" --results-directory ./coverage
+
+    - name: Code Coverage Report
+      uses: irongut/CodeCoverageSummary@v1.3.0
+      if: always()
+      with:
+        filename: coverage/**/coverage.cobertura.xml
+        badge: true
+        fail_below_min: false
+        format: markdown
+        hide_branch_rate: false
+        hide_complexity: true
+        indicators: true
+        output: both
+        thresholds: '60 80'
+
+    - name: Add Coverage PR Comment
+      uses: marocchino/sticky-pull-request-comment@v2
+      if: github.event_name == 'pull_request'
+      with:
+        recreate: true
+        path: code-coverage-results.md
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4
+      if: always()
+      with:
+        files: ./coverage/**/coverage.cobertura.xml
+        fail_ci_if_error: false
+        verbose: true
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  code-quality:
+    name: Code Quality
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+
+    - name: Cache NuGet packages
+      uses: actions/cache@v4
+      with:
+        path: ~/.nuget/packages
+        key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+        restore-keys: |
+          ${{ runner.os }}-nuget-
+
+    - name: Restore dependencies
+      run: dotnet restore
+
+    - name: Check formatting
+      run: dotnet format --verify-no-changes --verbosity diagnostic || echo "Formatting issues found"
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+
+    - name: Restore dependencies
+      run: dotnet restore
+
+    - name: Run security scan
+      run: |
+        dotnet list package --vulnerable --include-transitive 2>&1 | tee vulnerability-report.txt
+        if grep -q "has the following vulnerable packages" vulnerability-report.txt; then
+          echo "::warning::Vulnerable packages detected. Review vulnerability-report.txt"
+        fi
+
+    - name: Upload vulnerability report
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: vulnerability-report
+        path: vulnerability-report.txt

@@ -1,0 +1,37 @@
+version: 2
+updates:
+  # NuGet packages
+  - package-ecosystem: "nuget"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    groups:
+      microsoft:
+        patterns:
+          - "Microsoft.*"
+          - "System.*"
+      ef-core:
+        patterns:
+          - "Microsoft.EntityFrameworkCore*"
+      aspnet:
+        patterns:
+          - "Microsoft.AspNetCore*"
+      testing:
+        patterns:
+          - "xunit*"
+          - "NSubstitute*"
+          - "Shouldly*"
+          - "coverlet*"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
