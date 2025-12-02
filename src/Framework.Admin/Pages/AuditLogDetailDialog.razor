@@ -1,0 +1,141 @@
+@using Framework.Application.Auditing
+
+<MudDialog>
+    <DialogContent>
+        <MudGrid>
+            <MudItem xs="12" sm="6">
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Timestamp</MudText>
+                <MudText Typo="Typo.body1">@AuditLog.Timestamp.ToLocalTime().ToString("F")</MudText>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudText Typo="Typo.caption" Color="Color.Secondary">User</MudText>
+                <MudText Typo="Typo.body1">@(AuditLog.UserName ?? "System")</MudText>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Action</MudText>
+                <MudText Typo="Typo.body1">@AuditLog.ActionName</MudText>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Entity Type</MudText>
+                <MudText Typo="Typo.body1">@AuditLog.EntityType</MudText>
+            </MudItem>
+            @if (!string.IsNullOrEmpty(AuditLog.EntityId))
+            {
+                <MudItem xs="12" sm="6">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Entity ID</MudText>
+                    <MudText Typo="Typo.body1">@AuditLog.EntityId</MudText>
+                </MudItem>
+            }
+            @if (!string.IsNullOrEmpty(AuditLog.IpAddress))
+            {
+                <MudItem xs="12" sm="6">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">IP Address</MudText>
+                    <MudText Typo="Typo.body1">@AuditLog.IpAddress</MudText>
+                </MudItem>
+            }
+            <MudItem xs="12" sm="6">
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Status</MudText>
+                @if (AuditLog.IsSuccess)
+                {
+                    <MudChip T="string" Color="Color.Success" Size="Size.Small">Success</MudChip>
+                }
+                else
+                {
+                    <MudChip T="string" Color="Color.Error" Size="Size.Small">Failed</MudChip>
+                }
+            </MudItem>
+            @if (AuditLog.Duration.HasValue)
+            {
+                <MudItem xs="12" sm="6">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Duration</MudText>
+                    <MudText Typo="Typo.body1">@AuditLog.Duration ms</MudText>
+                </MudItem>
+            }
+            @if (!string.IsNullOrEmpty(AuditLog.ServiceName))
+            {
+                <MudItem xs="12" sm="6">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Service</MudText>
+                    <MudText Typo="Typo.body1">@AuditLog.ServiceName</MudText>
+                </MudItem>
+            }
+            @if (!string.IsNullOrEmpty(AuditLog.MethodName))
+            {
+                <MudItem xs="12" sm="6">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Method</MudText>
+                    <MudText Typo="Typo.body1">@AuditLog.MethodName</MudText>
+                </MudItem>
+            }
+            @if (!string.IsNullOrEmpty(AuditLog.ErrorMessage))
+            {
+                <MudItem xs="12">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Error Message</MudText>
+                    <MudAlert Severity="Severity.Error" Dense="true">@AuditLog.ErrorMessage</MudAlert>
+                </MudItem>
+            }
+            @if (!string.IsNullOrEmpty(AuditLog.AdditionalInfo))
+            {
+                <MudItem xs="12">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Additional Info</MudText>
+                    <MudText Typo="Typo.body2">@AuditLog.AdditionalInfo</MudText>
+                </MudItem>
+            }
+            @if (!string.IsNullOrEmpty(AuditLog.AffectedColumns))
+            {
+                <MudItem xs="12">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Affected Columns</MudText>
+                    <MudText Typo="Typo.body2">@AuditLog.AffectedColumns</MudText>
+                </MudItem>
+            }
+            @if (!string.IsNullOrEmpty(AuditLog.OldValues))
+            {
+                <MudItem xs="12">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Old Values</MudText>
+                    <MudPaper Class="pa-2" Elevation="0" Style="background-color: var(--mud-palette-background-grey); max-height: 200px; overflow: auto;">
+                        <pre style="margin: 0; white-space: pre-wrap; word-wrap: break-word; font-size: 0.75rem;">@FormatJson(AuditLog.OldValues)</pre>
+                    </MudPaper>
+                </MudItem>
+            }
+            @if (!string.IsNullOrEmpty(AuditLog.NewValues))
+            {
+                <MudItem xs="12">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">New Values</MudText>
+                    <MudPaper Class="pa-2" Elevation="0" Style="background-color: var(--mud-palette-background-grey); max-height: 200px; overflow: auto;">
+                        <pre style="margin: 0; white-space: pre-wrap; word-wrap: break-word; font-size: 0.75rem;">@FormatJson(AuditLog.NewValues)</pre>
+                    </MudPaper>
+                </MudItem>
+            }
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Close">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance? MudDialog { get; set; }
+
+    [Parameter]
+    public AuditLogDto AuditLog { get; set; } = new();
+
+    private void Close() => MudDialog?.Close();
+
+    private string FormatJson(string? json)
+    {
+        if (string.IsNullOrEmpty(json))
+            return string.Empty;
+
+        try
+        {
+            var obj = System.Text.Json.JsonSerializer.Deserialize<object>(json);
+            return System.Text.Json.JsonSerializer.Serialize(obj, new System.Text.Json.JsonSerializerOptions
+            {
+                WriteIndented = true
+            });
+        }
+        catch
+        {
+            return json;
+        }
+    }
+}

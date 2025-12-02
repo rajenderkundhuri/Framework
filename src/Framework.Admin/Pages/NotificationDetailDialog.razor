@@ -1,0 +1,68 @@
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">Notification Details</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudGrid>
+            <MudItem xs="12">
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Title</MudText>
+                <MudText Typo="Typo.h6">@Notification.Title</MudText>
+            </MudItem>
+            <MudItem xs="6">
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Type</MudText>
+                <MudChip T="string" Size="Size.Small" Color="Color.Info">@Notification.Type</MudChip>
+            </MudItem>
+            <MudItem xs="6">
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Severity</MudText>
+                <MudChip T="string" Size="Size.Small" Color="@GetSeverityColor(Notification.Severity)">@Notification.Severity</MudChip>
+            </MudItem>
+            <MudItem xs="6">
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Status</MudText>
+                @if (Notification.IsRead)
+                {
+                    <MudText Typo="Typo.body1">Read at @Notification.ReadAt?.ToLocalTime().ToString("g")</MudText>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body1">Unread</MudText>
+                }
+            </MudItem>
+            <MudItem xs="6">
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Created</MudText>
+                <MudText Typo="Typo.body1">@Notification.CreatedAt.ToLocalTime().ToString("g")</MudText>
+            </MudItem>
+            <MudItem xs="12">
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Message</MudText>
+                <MudPaper Class="pa-3 mt-2" Elevation="0" Outlined="true">
+                    <MudText Typo="Typo.body1">@Notification.Message</MudText>
+                </MudPaper>
+            </MudItem>
+            @if (!string.IsNullOrEmpty(Notification.ActionUrl))
+            {
+                <MudItem xs="12">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Action URL</MudText>
+                    <MudLink Href="@Notification.ActionUrl" Target="_blank">@Notification.ActionUrl</MudLink>
+                </MudItem>
+            }
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Close">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance? MudDialog { get; set; }
+    [Parameter] public NotificationResponse Notification { get; set; } = null!;
+
+    private void Close() => MudDialog?.Close();
+
+    private Color GetSeverityColor(NotificationSeverity severity) => severity switch
+    {
+        NotificationSeverity.Info => Color.Info,
+        NotificationSeverity.Success => Color.Success,
+        NotificationSeverity.Warning => Color.Warning,
+        NotificationSeverity.Error => Color.Error,
+        _ => Color.Default
+    };
+}

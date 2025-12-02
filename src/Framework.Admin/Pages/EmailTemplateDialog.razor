@@ -1,0 +1,162 @@
+@inject IEmailTemplateApiService EmailTemplateApiService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.MarkEmailRead" Class="mr-2" />
+            @(TemplateId.HasValue ? "Edit Email Template" : "Create Email Template")
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (_loading)
+        {
+            <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+        }
+        else
+        {
+            <MudForm @ref="_form" @bind-IsValid="@_formValid">
+                <MudGrid>
+                    <MudItem xs="12" md="6">
+                        <MudTextField @bind-Value="_name" Label="Name" Variant="Variant.Outlined"
+                                      Required="true" RequiredError="Name is required"
+                                      Disabled="@TemplateId.HasValue" />
+                    </MudItem>
+                    <MudItem xs="12" md="6">
+                        <MudSelect T="EmailTemplateType" @bind-Value="_type" Label="Type" Variant="Variant.Outlined"
+                                   Disabled="@TemplateId.HasValue">
+                            @foreach (EmailTemplateType type in Enum.GetValues(typeof(EmailTemplateType)))
+                            {
+                                <MudSelectItem T="EmailTemplateType" Value="@type">@type</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12">
+                        <MudTextField @bind-Value="_subject" Label="Subject" Variant="Variant.Outlined"
+                                      Required="true" RequiredError="Subject is required" />
+                    </MudItem>
+                    <MudItem xs="12">
+                        <MudTextField @bind-Value="_body" Label="Body (HTML)" Variant="Variant.Outlined"
+                                      Lines="12" Required="true" RequiredError="Body is required"
+                                      HelperText="Use placeholders like {{FirstName}}, {{Email}}, {{Link}}" />
+                    </MudItem>
+                    <MudItem xs="12" md="6">
+                        <MudTextField @bind-Value="_description" Label="Description" Variant="Variant.Outlined" />
+                    </MudItem>
+                    <MudItem xs="12" md="6">
+                        <MudTextField @bind-Value="_languageCode" Label="Language Code" Variant="Variant.Outlined"
+                                      Placeholder="e.g., en-US, fr-FR" />
+                    </MudItem>
+                </MudGrid>
+            </MudForm>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" OnClick="Submit" Disabled="@(!_formValid || _saving)">
+            @if (_saving)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Save
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance? MudDialog { get; set; }
+    [Parameter] public Guid? TemplateId { get; set; }
+
+    private MudForm? _form;
+    private bool _formValid;
+    private bool _saving;
+    private bool _loading = true;
+
+    private string _name = "";
+    private string _subject = "";
+    private string _body = "";
+    private EmailTemplateType _type = EmailTemplateType.Custom;
+    private string? _description;
+    private string? _languageCode;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (TemplateId.HasValue)
+        {
+            var result = await EmailTemplateApiService.GetByIdAsync(TemplateId.Value);
+            if (result.IsSuccess && result.Value != null)
+            {
+                _name = result.Value.Name;
+                _subject = result.Value.Subject;
+                _body = result.Value.Body;
+                _type = result.Value.Type;
+                _description = result.Value.Description;
+                _languageCode = result.Value.LanguageCode;
+            }
+        }
+        _loading = false;
+    }
+
+    private void Cancel() => MudDialog?.Cancel();
+
+    private async Task Submit()
+    {
+        if (_form != null)
+        {
+            await _form.Validate();
+            if (!_formValid) return;
+        }
+
+        _saving = true;
+
+        try
+        {
+            if (TemplateId.HasValue)
+            {
+                var request = new UpdateEmailTemplateRequest
+                {
+                    Subject = _subject,
+                    Body = _body,
+                    Description = _description,
+                    LanguageCode = _languageCode
+                };
+
+                var result = await EmailTemplateApiService.UpdateAsync(TemplateId.Value, request);
+                if (result.IsSuccess)
+                {
+                    MudDialog?.Close(DialogResult.Ok(true));
+                }
+                else
+                {
+                    Snackbar.Add(result.Error ?? "Failed to update template", Severity.Error);
+                }
+            }
+            else
+            {
+                var request = new CreateEmailTemplateRequest
+                {
+                    Name = _name,
+                    Subject = _subject,
+                    Body = _body,
+                    Type = _type,
+                    Description = _description,
+                    LanguageCode = _languageCode
+                };
+
+                var result = await EmailTemplateApiService.CreateAsync(request);
+                if (result.IsSuccess)
+                {
+                    MudDialog?.Close(DialogResult.Ok(true));
+                }
+                else
+                {
+                    Snackbar.Add(result.Error ?? "Failed to create template", Severity.Error);
+                }
+            }
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

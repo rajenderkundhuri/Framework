@@ -1,0 +1,170 @@
+@inject IResourceApiService ResourceApiService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="_form" @bind-IsValid="_isValid">
+            <MudGrid>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="_model.Key" Label="Key" Required="true"
+                                  RequiredError="Key is required" Variant="Variant.Outlined"
+                                  Disabled="_isEdit" HelperText="e.g., Common.Save, Validation.Required" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudSelect T="string" @bind-Value="_model.CultureName" Label="Language" Required="true"
+                               RequiredError="Language is required" Variant="Variant.Outlined"
+                               Disabled="_isEdit">
+                        @foreach (var lang in Languages)
+                        {
+                            <MudSelectItem T="string" Value="@lang.CultureName">@lang.DisplayName (@lang.CultureName)</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_model.Value" Label="Value" Required="true"
+                                  RequiredError="Value is required" Variant="Variant.Outlined"
+                                  Lines="3" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudAutocomplete T="string" @bind-Value="_model.Group" Label="Group"
+                                     SearchFunc="SearchGroups" Variant="Variant.Outlined"
+                                     CoerceText="true" CoerceValue="true"
+                                     HelperText="Select existing or type new group" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="_model.Description" Label="Description"
+                                  Variant="Variant.Outlined"
+                                  HelperText="Optional description for translators" />
+                </MudItem>
+            </MudGrid>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" OnClick="Submit" Disabled="@(!_isValid || _saving)">
+            @if (_saving)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            @(_isEdit ? "Update" : "Create")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public Guid? ResourceId { get; set; }
+    [Parameter] public List<LanguageResponse> Languages { get; set; } = new();
+    [Parameter] public List<string> Groups { get; set; } = new();
+
+    private MudForm? _form;
+    private bool _isValid;
+    private bool _saving;
+    private bool _isEdit => ResourceId.HasValue;
+    private ResourceModel _model = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (_isEdit)
+        {
+            var result = await ResourceApiService.GetResourceByIdAsync(ResourceId!.Value);
+            if (result.IsSuccess && result.Value != null)
+            {
+                _model = new ResourceModel
+                {
+                    Key = result.Value.Key,
+                    CultureName = result.Value.CultureName,
+                    Value = result.Value.Value,
+                    Group = result.Value.Group,
+                    Description = result.Value.Description
+                };
+            }
+        }
+        else if (Languages.Any())
+        {
+            _model.CultureName = Languages.FirstOrDefault(l => l.IsDefault)?.CultureName
+                ?? Languages.First().CultureName;
+        }
+    }
+
+    private Task<IEnumerable<string>> SearchGroups(string value, CancellationToken token)
+    {
+        if (string.IsNullOrEmpty(value))
+            return Task.FromResult(Groups.AsEnumerable());
+
+        return Task.FromResult(Groups
+            .Where(g => g.Contains(value, StringComparison.OrdinalIgnoreCase))
+            .Union(new[] { value }));
+    }
+
+    private async Task Submit()
+    {
+        if (_form != null)
+        {
+            await _form.Validate();
+            if (!_isValid) return;
+        }
+
+        _saving = true;
+
+        try
+        {
+            if (_isEdit)
+            {
+                var request = new UpdateResourceRequest
+                {
+                    Value = _model.Value,
+                    Group = _model.Group,
+                    Description = _model.Description
+                };
+
+                var result = await ResourceApiService.UpdateResourceAsync(ResourceId!.Value, request);
+                if (result.IsSuccess)
+                {
+                    MudDialog.Close(DialogResult.Ok(true));
+                }
+                else
+                {
+                    Snackbar.Add(result.Error ?? "Failed to update resource", Severity.Error);
+                }
+            }
+            else
+            {
+                var request = new CreateResourceRequest
+                {
+                    Key = _model.Key,
+                    CultureName = _model.CultureName,
+                    Value = _model.Value,
+                    Group = _model.Group,
+                    Description = _model.Description
+                };
+
+                var result = await ResourceApiService.CreateResourceAsync(request);
+                if (result.IsSuccess)
+                {
+                    MudDialog.Close(DialogResult.Ok(true));
+                }
+                else
+                {
+                    Snackbar.Add(result.Error ?? "Failed to create resource", Severity.Error);
+                }
+            }
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private class ResourceModel
+    {
+        public string Key { get; set; } = string.Empty;
+        public string CultureName { get; set; } = string.Empty;
+        public string Value { get; set; } = string.Empty;
+        public string? Group { get; set; }
+        public string? Description { get; set; }
+    }
+}

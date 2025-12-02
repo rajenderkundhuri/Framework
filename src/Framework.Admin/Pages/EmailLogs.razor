@@ -1,0 +1,110 @@
+@page "/email-logs"
+@attribute [Authorize]
+@inject IEmailTemplateApiService EmailTemplateApiService
+@inject IDialogService DialogService
+
+<PageTitle>Email Logs</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Email Logs</MudText>
+
+<MudPaper Class="pa-4" Elevation="2">
+    <MudStack Row="true" Spacing="2" Class="mb-4">
+        <MudTextField @bind-Value="_searchTerm" Placeholder="Search by email..." Variant="Variant.Outlined"
+                      Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                      Immediate="true" OnKeyUp="@(async e => { if (e.Key == "Enter") await LoadDataAsync(); })"
+                      Style="width: 300px;" />
+        <MudSelect T="EmailStatus?" @bind-Value="_statusFilter" Label="Status" Variant="Variant.Outlined"
+                   Dense="true" Style="width: 150px;">
+            <MudSelectItem T="EmailStatus?" Value="@((EmailStatus?)null)">All</MudSelectItem>
+            @foreach (EmailStatus status in Enum.GetValues(typeof(EmailStatus)))
+            {
+                <MudSelectItem T="EmailStatus?" Value="@status">@status</MudSelectItem>
+            }
+        </MudSelect>
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="LoadDataAsync"
+                   StartIcon="@Icons.Material.Filled.Refresh">Search</MudButton>
+    </MudStack>
+
+    <MudTable @ref="_table" T="EmailLogResponse" ServerData="@ServerReload" Dense="true" Hover="true"
+              Loading="_loading" LoadingProgressColor="Color.Primary">
+        <HeaderContent>
+            <MudTh>To</MudTh>
+            <MudTh>Subject</MudTh>
+            <MudTh>Template</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh>Sent At</MudTh>
+            <MudTh>Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="To">@context.To</MudTd>
+            <MudTd DataLabel="Subject">@context.Subject</MudTd>
+            <MudTd DataLabel="Template">@(context.TemplateName ?? "-")</MudTd>
+            <MudTd DataLabel="Status">
+                <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.Status)">@context.Status</MudChip>
+            </MudTd>
+            <MudTd DataLabel="Sent At">@context.SentAt.ToLocalTime().ToString("g")</MudTd>
+            <MudTd>
+                <MudIconButton Icon="@Icons.Material.Filled.Visibility" Size="Size.Small" Color="Color.Primary"
+                               OnClick="@(() => ViewDetails(context))" />
+            </MudTd>
+        </RowTemplate>
+        <PagerContent>
+            <MudTablePager PageSizeOptions="new int[]{10, 25, 50, 100}" />
+        </PagerContent>
+    </MudTable>
+</MudPaper>
+
+@code {
+    private MudTable<EmailLogResponse>? _table;
+    private bool _loading;
+    private string _searchTerm = "";
+    private EmailStatus? _statusFilter;
+
+    private async Task<TableData<EmailLogResponse>> ServerReload(TableState state, CancellationToken token)
+    {
+        _loading = true;
+
+        var request = new EmailLogListRequest
+        {
+            SearchTerm = _searchTerm,
+            Status = _statusFilter,
+            PageNumber = state.Page + 1,
+            PageSize = state.PageSize,
+            SortDescending = true
+        };
+
+        var result = await EmailTemplateApiService.GetEmailLogsAsync(request);
+
+        _loading = false;
+
+        if (result.IsSuccess && result.Value != null)
+        {
+            return new TableData<EmailLogResponse> { Items = result.Value.Items, TotalItems = result.Value.TotalCount };
+        }
+
+        return new TableData<EmailLogResponse> { Items = Array.Empty<EmailLogResponse>(), TotalItems = 0 };
+    }
+
+    private async Task LoadDataAsync()
+    {
+        if (_table != null)
+        {
+            await _table.ReloadServerData();
+        }
+    }
+
+    private Color GetStatusColor(EmailStatus status) => status switch
+    {
+        EmailStatus.Sent => Color.Success,
+        EmailStatus.Pending => Color.Warning,
+        EmailStatus.Failed => Color.Error,
+        _ => Color.Default
+    };
+
+    private async Task ViewDetails(EmailLogResponse log)
+    {
+        var parameters = new DialogParameters { ["Log"] = log };
+        await DialogService.ShowAsync<EmailLogDetailDialog>("Email Details", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true });
+    }
+}

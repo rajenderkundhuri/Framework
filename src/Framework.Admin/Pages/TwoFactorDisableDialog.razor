@@ -1,0 +1,62 @@
+@inject ITwoFactorApiService TwoFactorApiService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">Disable Two-Factor Authentication</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudAlert Severity="Severity.Warning" Class="mb-3">
+            Disabling two-factor authentication will make your account less secure.
+        </MudAlert>
+
+        <MudText Typo="Typo.body1" Class="mb-3">
+            Enter your authenticator code to disable 2FA:
+        </MudText>
+
+        <MudTextField @bind-Value="_verificationCode" Label="Verification Code" Variant="Variant.Outlined"
+                      Placeholder="000000" MaxLength="6" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Error" OnClick="Submit" Disabled="@_saving">
+            @if (_saving)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Disable 2FA
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance? MudDialog { get; set; }
+
+    private string _verificationCode = "";
+    private bool _saving;
+
+    private void Cancel() => MudDialog?.Cancel();
+
+    private async Task Submit()
+    {
+        if (string.IsNullOrWhiteSpace(_verificationCode) || _verificationCode.Length != 6)
+        {
+            Snackbar.Add("Please enter a 6-digit verification code", Severity.Warning);
+            return;
+        }
+
+        _saving = true;
+
+        var result = await TwoFactorApiService.DisableAsync(_verificationCode);
+        if (result.IsSuccess)
+        {
+            MudDialog?.Close(DialogResult.Ok(true));
+        }
+        else
+        {
+            Snackbar.Add(result.Error ?? "Invalid verification code", Severity.Error);
+        }
+
+        _saving = false;
+    }
+}

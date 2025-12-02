@@ -1,0 +1,198 @@
+@inject INotificationApiService NotificationApiService
+@inject IUserApiService UserApiService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.NotificationAdd" Class="mr-2" />
+            Send Notification
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudForm @ref="_form" @bind-IsValid="@_formValid">
+            <MudSwitch @bind-Value="_bulkMode" Label="Send to multiple users" Color="Color.Primary" Class="mb-3" />
+
+            @if (!_bulkMode)
+            {
+                <MudAutocomplete T="UserListResponse" Label="User" @bind-Value="_selectedUser"
+                                 SearchFunc="SearchUsers" ToStringFunc="@(u => u?.Email ?? "")"
+                                 Variant="Variant.Outlined" Class="mb-3"
+                                 Required="true" RequiredError="User is required" />
+            }
+            else
+            {
+                <MudChipSet T="UserListResponse" AllClosable="true" OnClose="@(chip => _selectedUsers.Remove((UserListResponse)chip.Value!))" Class="mb-3">
+                    @foreach (var user in _selectedUsers)
+                    {
+                        <MudChip T="UserListResponse" Value="@user" Color="Color.Primary">@user.Email</MudChip>
+                    }
+                </MudChipSet>
+                <MudAutocomplete T="UserListResponse" Label="Add User" Value="@_userToAdd"
+                                 SearchFunc="SearchUsers" ToStringFunc="@(u => u?.Email ?? "")"
+                                 ValueChanged="AddUserToList"
+                                 Variant="Variant.Outlined" Class="mb-3" />
+            }
+
+            <MudTextField @bind-Value="_title" Label="Title" Variant="Variant.Outlined" Class="mb-3"
+                          Required="true" RequiredError="Title is required" />
+            <MudTextField @bind-Value="_message" Label="Message" Variant="Variant.Outlined" Class="mb-3"
+                          Lines="4" Required="true" RequiredError="Message is required" />
+
+            <MudGrid>
+                <MudItem xs="6">
+                    <MudSelect T="NotificationType" @bind-Value="_type" Label="Type" Variant="Variant.Outlined">
+                        @foreach (NotificationType type in Enum.GetValues(typeof(NotificationType)))
+                        {
+                            <MudSelectItem T="NotificationType" Value="@type">@type</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="6">
+                    <MudSelect T="NotificationSeverity" @bind-Value="_severity" Label="Severity" Variant="Variant.Outlined">
+                        @foreach (NotificationSeverity severity in Enum.GetValues(typeof(NotificationSeverity)))
+                        {
+                            <MudSelectItem T="NotificationSeverity" Value="@severity">@severity</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+            </MudGrid>
+
+            <MudTextField @bind-Value="_actionUrl" Label="Action URL (optional)" Variant="Variant.Outlined" Class="mt-3" />
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" OnClick="Submit" Disabled="@(!_formValid || _saving)">
+            @if (_saving)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Send
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance? MudDialog { get; set; }
+
+    private MudForm? _form;
+    private bool _formValid;
+    private bool _saving;
+    private bool _bulkMode;
+
+    private UserListResponse? _selectedUser;
+    private UserListResponse? _userToAdd;
+    private List<UserListResponse> _selectedUsers = new();
+
+    private string _title = "";
+    private string _message = "";
+    private NotificationType _type = NotificationType.Info;
+    private NotificationSeverity _severity = NotificationSeverity.Info;
+    private string? _actionUrl;
+
+    private async Task<IEnumerable<UserListResponse>> SearchUsers(string? value, CancellationToken token)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return Array.Empty<UserListResponse>();
+
+        var result = await UserApiService.GetUsersAsync(new UserListRequest
+        {
+            SearchTerm = value,
+            PageNumber = 1,
+            PageSize = 10,
+            IsActive = true
+        });
+
+        return result.IsSuccess && result.Value != null
+            ? result.Value.Items
+            : Array.Empty<UserListResponse>();
+    }
+
+    private void AddUserToList(UserListResponse? user)
+    {
+        if (user != null && !_selectedUsers.Any(u => u.Id == user.Id))
+        {
+            _selectedUsers.Add(user);
+        }
+        _userToAdd = null;
+    }
+
+    private void Cancel() => MudDialog?.Cancel();
+
+    private async Task Submit()
+    {
+        if (_form != null)
+        {
+            await _form.Validate();
+            if (!_formValid) return;
+        }
+
+        if (!_bulkMode && _selectedUser == null)
+        {
+            Snackbar.Add("Please select a user", Severity.Warning);
+            return;
+        }
+
+        if (_bulkMode && !_selectedUsers.Any())
+        {
+            Snackbar.Add("Please select at least one user", Severity.Warning);
+            return;
+        }
+
+        _saving = true;
+
+        try
+        {
+            if (_bulkMode)
+            {
+                var request = new CreateBulkNotificationRequest
+                {
+                    UserIds = _selectedUsers.Select(u => u.Id).ToList(),
+                    Title = _title,
+                    Message = _message,
+                    Type = _type,
+                    Severity = _severity,
+                    ActionUrl = _actionUrl
+                };
+
+                var result = await NotificationApiService.CreateBulkAsync(request);
+                if (result.IsSuccess)
+                {
+                    Snackbar.Add($"Sent {result.Value} notifications", Severity.Success);
+                    MudDialog?.Close(DialogResult.Ok(true));
+                }
+                else
+                {
+                    Snackbar.Add(result.Error ?? "Failed to send notifications", Severity.Error);
+                }
+            }
+            else
+            {
+                var request = new CreateNotificationRequest
+                {
+                    UserId = _selectedUser!.Id,
+                    Title = _title,
+                    Message = _message,
+                    Type = _type,
+                    Severity = _severity,
+                    ActionUrl = _actionUrl
+                };
+
+                var result = await NotificationApiService.CreateAsync(request);
+                if (result.IsSuccess)
+                {
+                    MudDialog?.Close(DialogResult.Ok(true));
+                }
+                else
+                {
+                    Snackbar.Add(result.Error ?? "Failed to send notification", Severity.Error);
+                }
+            }
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

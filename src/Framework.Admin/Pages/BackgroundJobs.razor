@@ -1,0 +1,349 @@
+@page "/background-jobs"
+@attribute [Authorize]
+@using Framework.Application.BackgroundJobs
+@using Framework.Domain.BackgroundJobs
+@inject IBackgroundJobApiService JobService
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<PageTitle>Background Jobs</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Background Jobs</MudText>
+
+@if (_statistics != null)
+{
+    <MudGrid Class="mb-4">
+        <MudItem xs="12" sm="6" md="3" lg="2">
+            <MudPaper Class="pa-4 d-flex flex-column align-center" Elevation="2">
+                <MudIcon Icon="@Icons.Material.Filled.Queue" Color="Color.Info" Size="Size.Large" />
+                <MudText Typo="Typo.h5" Class="mt-2">@_statistics.EnqueuedCount</MudText>
+                <MudText Typo="Typo.caption">Enqueued</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3" lg="2">
+            <MudPaper Class="pa-4 d-flex flex-column align-center" Elevation="2">
+                <MudIcon Icon="@Icons.Material.Filled.Schedule" Color="Color.Warning" Size="Size.Large" />
+                <MudText Typo="Typo.h5" Class="mt-2">@_statistics.ScheduledCount</MudText>
+                <MudText Typo="Typo.caption">Scheduled</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3" lg="2">
+            <MudPaper Class="pa-4 d-flex flex-column align-center" Elevation="2">
+                <MudIcon Icon="@Icons.Material.Filled.PlayCircle" Color="Color.Primary" Size="Size.Large" />
+                <MudText Typo="Typo.h5" Class="mt-2">@_statistics.ProcessingCount</MudText>
+                <MudText Typo="Typo.caption">Processing</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3" lg="2">
+            <MudPaper Class="pa-4 d-flex flex-column align-center" Elevation="2">
+                <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Large" />
+                <MudText Typo="Typo.h5" Class="mt-2">@_statistics.SucceededCount</MudText>
+                <MudText Typo="Typo.caption">Succeeded</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3" lg="2">
+            <MudPaper Class="pa-4 d-flex flex-column align-center" Elevation="2">
+                <MudIcon Icon="@Icons.Material.Filled.Error" Color="Color.Error" Size="Size.Large" />
+                <MudText Typo="Typo.h5" Class="mt-2">@_statistics.FailedCount</MudText>
+                <MudText Typo="Typo.caption">Failed</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3" lg="2">
+            <MudPaper Class="pa-4 d-flex flex-column align-center" Elevation="2">
+                <MudIcon Icon="@Icons.Material.Filled.Repeat" Color="Color.Secondary" Size="Size.Large" />
+                <MudText Typo="Typo.h5" Class="mt-2">@_statistics.RecurringCount</MudText>
+                <MudText Typo="Typo.caption">Recurring</MudText>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+}
+
+<MudPaper Class="pa-4 mb-4">
+    <MudGrid>
+        <MudItem xs="12" sm="6" md="3">
+            <MudTextField @bind-Value="_filter.NameContains" Label="Search by Name" Variant="Variant.Outlined" Margin="Margin.Dense"
+                          Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.Search"
+                          OnKeyDown="@OnSearchKeyDown" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="2">
+            <MudSelect @bind-Value="_filter.Status" Label="Status" Variant="Variant.Outlined" Margin="Margin.Dense"
+                       Clearable="true">
+                @foreach (JobStatus status in Enum.GetValues<JobStatus>())
+                {
+                    <MudSelectItem Value="@((JobStatus?)status)">@status</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="2">
+            <MudSelect @bind-Value="_filter.Type" Label="Type" Variant="Variant.Outlined" Margin="Margin.Dense"
+                       Clearable="true">
+                @foreach (JobType type in Enum.GetValues<JobType>())
+                {
+                    <MudSelectItem Value="@((JobType?)type)">@type</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="2">
+            <MudTextField @bind-Value="_filter.Queue" Label="Queue" Variant="Variant.Outlined" Margin="Margin.Dense" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="2">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="@SearchAsync" Class="mt-1" FullWidth="true">
+                Search
+            </MudButton>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="1">
+            <MudButton Variant="Variant.Outlined" Color="Color.Default" OnClick="@RefreshAsync" Class="mt-1" FullWidth="true">
+                <MudIcon Icon="@Icons.Material.Filled.Refresh" />
+            </MudButton>
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
+<MudTable @ref="_table" T="JobInfo" ServerData="@ServerReload" Dense="true" Hover="true"
+          Loading="_loading" LoadingProgressColor="Color.Primary">
+    <HeaderContent>
+        <MudTh>ID</MudTh>
+        <MudTh>Name</MudTh>
+        <MudTh>Type</MudTh>
+        <MudTh>Status</MudTh>
+        <MudTh>Queue</MudTh>
+        <MudTh>Created</MudTh>
+        <MudTh>Duration</MudTh>
+        <MudTh>Actions</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="ID">
+            <MudTooltip Text="@context.Id">
+                <MudText Typo="Typo.caption">@TruncateId(context.Id)</MudText>
+            </MudTooltip>
+        </MudTd>
+        <MudTd DataLabel="Name">
+            <MudText Typo="Typo.body2">@context.Name</MudText>
+            @if (!string.IsNullOrEmpty(context.CronExpression))
+            {
+                <MudText Typo="Typo.caption" Color="Color.Secondary">@context.CronExpression</MudText>
+            }
+        </MudTd>
+        <MudTd DataLabel="Type">
+            <MudChip T="string" Color="@GetTypeColor(context.Type)" Size="Size.Small" Variant="Variant.Outlined">
+                @context.Type
+            </MudChip>
+        </MudTd>
+        <MudTd DataLabel="Status">
+            <MudChip T="string" Color="@GetStatusColor(context.Status)" Size="Size.Small">
+                @context.Status
+            </MudChip>
+            @if (!string.IsNullOrEmpty(context.ErrorMessage))
+            {
+                <MudTooltip Text="@context.ErrorMessage">
+                    <MudIcon Icon="@Icons.Material.Filled.Info" Color="Color.Error" Size="Size.Small" Class="ml-1" />
+                </MudTooltip>
+            }
+        </MudTd>
+        <MudTd DataLabel="Queue">@(context.Queue ?? "default")</MudTd>
+        <MudTd DataLabel="Created">@context.CreatedAt.ToLocalTime().ToString("g")</MudTd>
+        <MudTd DataLabel="Duration">
+            @if (context.DurationMs.HasValue)
+            {
+                @FormatDuration(context.DurationMs.Value)
+            }
+            else if (context.StartedAt.HasValue && context.Status == JobStatus.Processing)
+            {
+                <MudText Color="Color.Info">Running...</MudText>
+            }
+        </MudTd>
+        <MudTd DataLabel="Actions">
+            @if (context.Status == JobStatus.Failed)
+            {
+                <MudTooltip Text="Requeue">
+                    <MudIconButton Icon="@Icons.Material.Filled.Replay" Size="Size.Small" Color="Color.Warning"
+                                   OnClick="@(() => RequeueJobAsync(context.Id))" />
+                </MudTooltip>
+            }
+            @if (context.Type == JobType.Recurring)
+            {
+                <MudTooltip Text="Trigger Now">
+                    <MudIconButton Icon="@Icons.Material.Filled.PlayArrow" Size="Size.Small" Color="Color.Primary"
+                                   OnClick="@(() => TriggerRecurringJobAsync(context.Id))" />
+                </MudTooltip>
+            }
+            <MudTooltip Text="Delete">
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                               OnClick="@(() => DeleteJobAsync(context))" />
+            </MudTooltip>
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <MudText>No jobs found</MudText>
+    </NoRecordsContent>
+    <LoadingContent>
+        <MudText>Loading...</MudText>
+    </LoadingContent>
+    <PagerContent>
+        <MudTablePager PageSizeOptions="new int[] { 10, 25, 50, 100 }" />
+    </PagerContent>
+</MudTable>
+
+@code {
+    private MudTable<JobInfo>? _table;
+    private bool _loading;
+    private JobFilter _filter = new();
+    private JobStatistics? _statistics;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadStatisticsAsync();
+    }
+
+    private async Task LoadStatisticsAsync()
+    {
+        var result = await JobService.GetStatisticsAsync();
+        if (result.IsSuccess && result.Value != null)
+        {
+            _statistics = result.Value;
+        }
+    }
+
+    private async Task<TableData<JobInfo>> ServerReload(TableState state, CancellationToken cancellationToken)
+    {
+        _loading = true;
+
+        _filter.PageNumber = state.Page + 1;
+        _filter.PageSize = state.PageSize > 0 ? state.PageSize : 10;
+
+        var result = await JobService.GetJobsAsync(_filter);
+
+        _loading = false;
+
+        if (result.IsSuccess && result.Value != null)
+        {
+            return new TableData<JobInfo>
+            {
+                TotalItems = result.Value.TotalCount,
+                Items = result.Value.Jobs
+            };
+        }
+
+        Snackbar.Add(result.Error ?? "Failed to load jobs", Severity.Error);
+        return new TableData<JobInfo> { TotalItems = 0, Items = Enumerable.Empty<JobInfo>() };
+    }
+
+    private async Task SearchAsync()
+    {
+        if (_table != null)
+        {
+            await _table.ReloadServerData();
+        }
+    }
+
+    private async Task RefreshAsync()
+    {
+        await LoadStatisticsAsync();
+        await SearchAsync();
+    }
+
+    private async Task OnSearchKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await SearchAsync();
+        }
+    }
+
+    private async Task RequeueJobAsync(string jobId)
+    {
+        var result = await JobService.RequeueJobAsync(jobId);
+        if (result.IsSuccess)
+        {
+            Snackbar.Add("Job requeued successfully", Severity.Success);
+            await RefreshAsync();
+        }
+        else
+        {
+            Snackbar.Add(result.Error ?? "Failed to requeue job", Severity.Error);
+        }
+    }
+
+    private async Task TriggerRecurringJobAsync(string jobId)
+    {
+        var result = await JobService.TriggerRecurringJobAsync(jobId);
+        if (result.IsSuccess)
+        {
+            Snackbar.Add("Recurring job triggered successfully", Severity.Success);
+            await RefreshAsync();
+        }
+        else
+        {
+            Snackbar.Add(result.Error ?? "Failed to trigger recurring job", Severity.Error);
+        }
+    }
+
+    private async Task DeleteJobAsync(JobInfo job)
+    {
+        var confirm = await DialogService.ShowMessageBox(
+            "Delete Job",
+            $"Are you sure you want to delete job '{job.Name}'?",
+            yesText: "Delete",
+            cancelText: "Cancel");
+
+        if (confirm == true)
+        {
+            var result = job.Type == JobType.Recurring
+                ? await JobService.RemoveRecurringJobAsync(job.Id)
+                : await JobService.DeleteJobAsync(job.Id);
+
+            if (result.IsSuccess)
+            {
+                Snackbar.Add("Job deleted successfully", Severity.Success);
+                await RefreshAsync();
+            }
+            else
+            {
+                Snackbar.Add(result.Error ?? "Failed to delete job", Severity.Error);
+            }
+        }
+    }
+
+    private static string TruncateId(string id)
+    {
+        return id.Length > 12 ? id[..12] + "..." : id;
+    }
+
+    private static string FormatDuration(long ms)
+    {
+        if (ms < 1000)
+            return $"{ms}ms";
+        if (ms < 60000)
+            return $"{ms / 1000.0:F1}s";
+        if (ms < 3600000)
+            return $"{ms / 60000.0:F1}m";
+        return $"{ms / 3600000.0:F1}h";
+    }
+
+    private static Color GetStatusColor(JobStatus status)
+    {
+        return status switch
+        {
+            JobStatus.Enqueued => Color.Info,
+            JobStatus.Scheduled => Color.Warning,
+            JobStatus.Processing => Color.Primary,
+            JobStatus.Succeeded => Color.Success,
+            JobStatus.Failed => Color.Error,
+            JobStatus.Deleted => Color.Dark,
+            JobStatus.Awaiting => Color.Secondary,
+            _ => Color.Default
+        };
+    }
+
+    private static Color GetTypeColor(JobType type)
+    {
+        return type switch
+        {
+            JobType.FireAndForget => Color.Primary,
+            JobType.Delayed => Color.Warning,
+            JobType.Recurring => Color.Secondary,
+            JobType.Continuation => Color.Info,
+            _ => Color.Default
+        };
+    }
+}

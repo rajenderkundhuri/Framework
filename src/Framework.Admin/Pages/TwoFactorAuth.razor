@@ -1,0 +1,276 @@
+@page "/two-factor"
+@attribute [Authorize]
+@inject ITwoFactorApiService TwoFactorApiService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Two-Factor Authentication</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Two-Factor Authentication</MudText>
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+}
+else if (_status != null)
+{
+    <MudGrid>
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudText Typo="Typo.h6" Class="mb-3">Status</MudText>
+
+                <MudStack Spacing="2">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                        <MudText>Two-Factor Authentication</MudText>
+                        @if (_status.IsEnabled)
+                        {
+                            <MudChip T="string" Color="Color.Success" Size="Size.Small">Enabled</MudChip>
+                        }
+                        else
+                        {
+                            <MudChip T="string" Color="Color.Error" Size="Size.Small">Disabled</MudChip>
+                        }
+                    </MudStack>
+
+                    @if (_status.IsEnabled)
+                    {
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                            <MudText>Authenticator Confirmed</MudText>
+                            @if (_status.AuthenticatorConfirmed)
+                            {
+                                <MudChip T="string" Color="Color.Success" Size="Size.Small">Yes</MudChip>
+                            }
+                            else
+                            {
+                                <MudChip T="string" Color="Color.Warning" Size="Size.Small">No</MudChip>
+                            }
+                        </MudStack>
+
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                            <MudText>Recovery Codes Remaining</MudText>
+                            <MudChip T="string" Color="@(_status.RecoveryCodesRemaining > 3 ? Color.Success : Color.Warning)" Size="Size.Small">
+                                @_status.RecoveryCodesRemaining
+                            </MudChip>
+                        </MudStack>
+
+                        @if (_status.EnabledAt.HasValue)
+                        {
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                                <MudText>Enabled At</MudText>
+                                <MudText>@_status.EnabledAt.Value.ToLocalTime().ToString("g")</MudText>
+                            </MudStack>
+                        }
+                    }
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudText Typo="Typo.h6" Class="mb-3">Actions</MudText>
+
+                @if (!_status.IsEnabled)
+                {
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="BeginSetup" FullWidth="true" Class="mb-2"
+                               StartIcon="@Icons.Material.Filled.Security">
+                        Enable Two-Factor Authentication
+                    </MudButton>
+                }
+                else
+                {
+                    @if (!_status.AuthenticatorConfirmed)
+                    {
+                        <MudAlert Severity="Severity.Warning" Class="mb-3">
+                            Your authenticator is not confirmed yet. Please complete the setup.
+                        </MudAlert>
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="BeginSetup" FullWidth="true" Class="mb-2"
+                                   StartIcon="@Icons.Material.Filled.Security">
+                            Complete Setup
+                        </MudButton>
+                    }
+
+                    <MudButton Variant="Variant.Outlined" Color="Color.Warning" OnClick="RegenerateRecoveryCodes" FullWidth="true" Class="mb-2"
+                               StartIcon="@Icons.Material.Filled.Refresh">
+                        Regenerate Recovery Codes
+                    </MudButton>
+
+                    <MudButton Variant="Variant.Outlined" Color="Color.Error" OnClick="DisableTwoFactor" FullWidth="true"
+                               StartIcon="@Icons.Material.Filled.Block">
+                        Disable Two-Factor Authentication
+                    </MudButton>
+                }
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    @if (_setupResponse != null)
+    {
+        <MudPaper Class="pa-4 mt-4" Elevation="2">
+            <MudText Typo="Typo.h6" Class="mb-3">Setup Authenticator</MudText>
+
+            <MudGrid>
+                <MudItem xs="12" md="6">
+                    <MudText Typo="Typo.body1" Class="mb-3">
+                        Scan this QR code with your authenticator app (Google Authenticator, Authy, etc.):
+                    </MudText>
+
+                    @if (!string.IsNullOrEmpty(_setupResponse.QrCodeBase64))
+                    {
+                        <div class="d-flex justify-center mb-3">
+                            <img src="data:image/png;base64,@_setupResponse.QrCodeBase64" alt="QR Code" style="max-width: 200px;" />
+                        </div>
+                    }
+
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Or enter this key manually:</MudText>
+                    <MudPaper Class="pa-2 mt-1" Elevation="0" Outlined="true">
+                        <code>@_setupResponse.SharedKey</code>
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudText Typo="Typo.body1" Class="mb-3">
+                        Enter the verification code from your authenticator app:
+                    </MudText>
+
+                    <MudTextField @bind-Value="_verificationCode" Label="Verification Code" Variant="Variant.Outlined"
+                                  Placeholder="000000" MaxLength="6" Class="mb-3" />
+
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ConfirmSetup" Disabled="@_saving"
+                               FullWidth="true">
+                        @if (_saving)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                        }
+                        Verify and Enable
+                    </MudButton>
+                </MudItem>
+            </MudGrid>
+        </MudPaper>
+    }
+
+    @if (_recoveryCodes.Any())
+    {
+        <MudPaper Class="pa-4 mt-4" Elevation="2">
+            <MudAlert Severity="Severity.Warning" Class="mb-3">
+                Store these recovery codes in a safe place. Each code can only be used once.
+            </MudAlert>
+
+            <MudText Typo="Typo.h6" Class="mb-3">Recovery Codes</MudText>
+
+            <MudGrid>
+                @foreach (var recoveryCode in _recoveryCodes)
+                {
+                    <MudItem xs="6" sm="4" md="3">
+                        <code>@recoveryCode</code>
+                    </MudItem>
+                }
+            </MudGrid>
+
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="() => _recoveryCodes.Clear()" Class="mt-3">
+                I've saved these codes
+            </MudButton>
+        </MudPaper>
+    }
+}
+
+@code {
+    private bool _loading = true;
+    private bool _saving;
+    private TwoFactorStatusResponse? _status;
+    private TwoFactorSetupResponse? _setupResponse;
+    private string _verificationCode = "";
+    private List<string> _recoveryCodes = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadStatusAsync();
+    }
+
+    private async Task LoadStatusAsync()
+    {
+        _loading = true;
+        var result = await TwoFactorApiService.GetStatusAsync();
+        if (result.IsSuccess)
+        {
+            _status = result.Value;
+        }
+        else
+        {
+            Snackbar.Add(result.Error ?? "Failed to load 2FA status", Severity.Error);
+        }
+        _loading = false;
+    }
+
+    private async Task BeginSetup()
+    {
+        var result = await TwoFactorApiService.BeginSetupAsync();
+        if (result.IsSuccess && result.Value != null)
+        {
+            _setupResponse = result.Value;
+        }
+        else
+        {
+            Snackbar.Add(result.Error ?? "Failed to start 2FA setup", Severity.Error);
+        }
+    }
+
+    private async Task ConfirmSetup()
+    {
+        if (string.IsNullOrWhiteSpace(_verificationCode) || _verificationCode.Length != 6)
+        {
+            Snackbar.Add("Please enter a 6-digit verification code", Severity.Warning);
+            return;
+        }
+
+        _saving = true;
+        var result = await TwoFactorApiService.ConfirmSetupAsync(_verificationCode);
+        if (result.IsSuccess && result.Value != null)
+        {
+            _recoveryCodes = result.Value.RecoveryCodes;
+            _setupResponse = null;
+            _verificationCode = "";
+            await LoadStatusAsync();
+            Snackbar.Add("Two-factor authentication enabled successfully", Severity.Success);
+        }
+        else
+        {
+            Snackbar.Add(result.Error ?? "Invalid verification code", Severity.Error);
+        }
+        _saving = false;
+    }
+
+    private async Task DisableTwoFactor()
+    {
+        var parameters = new DialogParameters();
+        var dialog = await DialogService.ShowAsync<TwoFactorDisableDialog>("Disable Two-Factor Authentication", parameters);
+        var result = await dialog.Result;
+
+        if (result != null && !result.Canceled)
+        {
+            await LoadStatusAsync();
+            Snackbar.Add("Two-factor authentication disabled", Severity.Success);
+        }
+    }
+
+    private async Task RegenerateRecoveryCodes()
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Regenerate Recovery Codes",
+            "This will invalidate all your existing recovery codes. Are you sure?",
+            yesText: "Regenerate", cancelText: "Cancel");
+
+        if (confirmed == true)
+        {
+            var result = await TwoFactorApiService.RegenerateRecoveryCodesAsync();
+            if (result.IsSuccess && result.Value != null)
+            {
+                _recoveryCodes = result.Value.RecoveryCodes;
+                await LoadStatusAsync();
+                Snackbar.Add("Recovery codes regenerated", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add(result.Error ?? "Failed to regenerate recovery codes", Severity.Error);
+            }
+        }
+    }
+}

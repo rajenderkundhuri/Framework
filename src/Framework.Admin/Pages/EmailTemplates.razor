@@ -1,0 +1,215 @@
+@page "/email-templates"
+@attribute [Authorize]
+@inject IEmailTemplateApiService EmailTemplateApiService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Email Templates</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Email Template Management</MudText>
+
+<MudPaper Class="pa-4" Elevation="2">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+        <MudStack Row="true" Spacing="2">
+            <MudTextField @bind-Value="_searchTerm" Placeholder="Search templates..." Variant="Variant.Outlined"
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                          Immediate="true" OnKeyUp="@(async e => { if (e.Key == "Enter") await LoadDataAsync(); })"
+                          Class="mr-2" Style="width: 300px;" />
+            <MudSelect T="bool?" @bind-Value="_isActiveFilter" Label="Status" Variant="Variant.Outlined"
+                       Dense="true" Class="mr-2" Style="width: 150px;">
+                <MudSelectItem T="bool?" Value="@((bool?)null)">All</MudSelectItem>
+                <MudSelectItem T="bool?" Value="@true">Active</MudSelectItem>
+                <MudSelectItem T="bool?" Value="@false">Inactive</MudSelectItem>
+            </MudSelect>
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="LoadDataAsync"
+                       StartIcon="@Icons.Material.Filled.Refresh">Search</MudButton>
+        </MudStack>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="OpenCreateDialog"
+                   StartIcon="@Icons.Material.Filled.Add">Add Template</MudButton>
+    </MudStack>
+
+    <MudTable @ref="_table" T="EmailTemplateResponse" ServerData="@ServerReload" Dense="true" Hover="true"
+              Loading="_loading" LoadingProgressColor="Color.Primary">
+        <HeaderContent>
+            <MudTh><MudTableSortLabel SortLabel="Name" T="EmailTemplateResponse">Name</MudTableSortLabel></MudTh>
+            <MudTh>Subject</MudTh>
+            <MudTh>Type</MudTh>
+            <MudTh>Language</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh><MudTableSortLabel SortLabel="CreatedAt" T="EmailTemplateResponse">Created</MudTableSortLabel></MudTh>
+            <MudTh>Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Name">@context.Name</MudTd>
+            <MudTd DataLabel="Subject">@context.Subject</MudTd>
+            <MudTd DataLabel="Type">
+                <MudChip T="string" Size="Size.Small" Color="Color.Info">@context.Type</MudChip>
+            </MudTd>
+            <MudTd DataLabel="Language">@(context.LanguageCode ?? "Default")</MudTd>
+            <MudTd DataLabel="Status">
+                @if (context.IsActive)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Success">Active</MudChip>
+                }
+                else
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Error">Inactive</MudChip>
+                }
+            </MudTd>
+            <MudTd DataLabel="Created">@context.CreatedAt.ToLocalTime().ToString("g")</MudTd>
+            <MudTd>
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                               OnClick="@(() => OpenEditDialog(context))" />
+                @if (context.IsActive)
+                {
+                    <MudIconButton Icon="@Icons.Material.Filled.Block" Size="Size.Small" Color="Color.Warning"
+                                   OnClick="@(() => DeactivateAsync(context))" />
+                }
+                else
+                {
+                    <MudIconButton Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Color="Color.Success"
+                                   OnClick="@(() => ActivateAsync(context))" />
+                }
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                               OnClick="@(() => DeleteAsync(context))" />
+            </MudTd>
+        </RowTemplate>
+        <PagerContent>
+            <MudTablePager PageSizeOptions="new int[]{10, 25, 50, 100}" />
+        </PagerContent>
+    </MudTable>
+</MudPaper>
+
+@code {
+    private MudTable<EmailTemplateResponse>? _table;
+    private bool _loading;
+    private string _searchTerm = "";
+    private bool? _isActiveFilter;
+
+    private async Task<TableData<EmailTemplateResponse>> ServerReload(TableState state, CancellationToken token)
+    {
+        _loading = true;
+
+        var request = new EmailTemplateListRequest
+        {
+            SearchTerm = _searchTerm,
+            IsActive = _isActiveFilter,
+            PageNumber = state.Page + 1,
+            PageSize = state.PageSize,
+            SortBy = state.SortLabel ?? "Name",
+            SortDescending = state.SortDirection == SortDirection.Descending
+        };
+
+        var result = await EmailTemplateApiService.GetTemplatesAsync(request);
+
+        _loading = false;
+
+        if (result.IsSuccess && result.Value != null)
+        {
+            return new TableData<EmailTemplateResponse> { Items = result.Value.Items, TotalItems = result.Value.TotalCount };
+        }
+
+        return new TableData<EmailTemplateResponse> { Items = Array.Empty<EmailTemplateResponse>(), TotalItems = 0 };
+    }
+
+    private async Task LoadDataAsync()
+    {
+        if (_table != null)
+        {
+            await _table.ReloadServerData();
+        }
+    }
+
+    private async Task OpenCreateDialog()
+    {
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<EmailTemplateDialog>("Create Email Template", options);
+        var result = await dialog.Result;
+
+        if (result != null && !result.Canceled)
+        {
+            await LoadDataAsync();
+            Snackbar.Add("Email template created successfully", Severity.Success);
+        }
+    }
+
+    private async Task OpenEditDialog(EmailTemplateResponse template)
+    {
+        var parameters = new DialogParameters { ["TemplateId"] = template.Id };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<EmailTemplateDialog>("Edit Email Template", parameters, options);
+        var result = await dialog.Result;
+
+        if (result != null && !result.Canceled)
+        {
+            await LoadDataAsync();
+            Snackbar.Add("Email template updated successfully", Severity.Success);
+        }
+    }
+
+    private async Task ActivateAsync(EmailTemplateResponse template)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Confirm Activation",
+            $"Are you sure you want to activate template '{template.Name}'?",
+            yesText: "Activate", cancelText: "Cancel");
+
+        if (confirmed == true)
+        {
+            var result = await EmailTemplateApiService.ActivateAsync(template.Id);
+            if (result.IsSuccess)
+            {
+                await LoadDataAsync();
+                Snackbar.Add("Template activated successfully", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add(result.Error ?? "Failed to activate template", Severity.Error);
+            }
+        }
+    }
+
+    private async Task DeactivateAsync(EmailTemplateResponse template)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Confirm Deactivation",
+            $"Are you sure you want to deactivate template '{template.Name}'?",
+            yesText: "Deactivate", cancelText: "Cancel");
+
+        if (confirmed == true)
+        {
+            var result = await EmailTemplateApiService.DeactivateAsync(template.Id);
+            if (result.IsSuccess)
+            {
+                await LoadDataAsync();
+                Snackbar.Add("Template deactivated successfully", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add(result.Error ?? "Failed to deactivate template", Severity.Error);
+            }
+        }
+    }
+
+    private async Task DeleteAsync(EmailTemplateResponse template)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Confirm Deletion",
+            $"Are you sure you want to delete template '{template.Name}'? This action cannot be undone.",
+            yesText: "Delete", cancelText: "Cancel");
+
+        if (confirmed == true)
+        {
+            var result = await EmailTemplateApiService.DeleteAsync(template.Id);
+            if (result.IsSuccess)
+            {
+                await LoadDataAsync();
+                Snackbar.Add("Template deleted successfully", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add(result.Error ?? "Failed to delete template", Severity.Error);
+            }
+        }
+    }
+}

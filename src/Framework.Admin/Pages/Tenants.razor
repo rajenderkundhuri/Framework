@@ -1,0 +1,239 @@
+@page "/tenants"
+@attribute [Authorize]
+@inject ITenantApiService TenantApiService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Tenants</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Tenant Management</MudText>
+
+<MudPaper Class="pa-4" Elevation="2">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+        <MudStack Row="true" Spacing="2">
+            <MudTextField @bind-Value="_searchTerm" Placeholder="Search tenants..." Variant="Variant.Outlined"
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                          Immediate="true" OnKeyUp="@(async e => { if (e.Key == "Enter") await LoadTenantsAsync(); })"
+                          Class="mr-2" Style="width: 300px;" />
+            <MudSelect T="bool?" @bind-Value="_isActiveFilter" Label="Status" Variant="Variant.Outlined"
+                       Dense="true" Class="mr-2" Style="width: 150px;">
+                <MudSelectItem T="bool?" Value="@((bool?)null)">All</MudSelectItem>
+                <MudSelectItem T="bool?" Value="@true">Active</MudSelectItem>
+                <MudSelectItem T="bool?" Value="@false">Inactive</MudSelectItem>
+            </MudSelect>
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="LoadTenantsAsync"
+                       StartIcon="@Icons.Material.Filled.Refresh">Search</MudButton>
+        </MudStack>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="OpenCreateDialog"
+                   StartIcon="@Icons.Material.Filled.Add">Add Tenant</MudButton>
+    </MudStack>
+
+    <MudTable @ref="_table" T="TenantListResponse" ServerData="@ServerReload" Dense="true" Hover="true"
+              Loading="_loading" LoadingProgressColor="Color.Primary">
+        <HeaderContent>
+            <MudTh><MudTableSortLabel SortLabel="Name" T="TenantListResponse">Name</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortLabel="Identifier" T="TenantListResponse">Identifier</MudTableSortLabel></MudTh>
+            <MudTh>Admin Email</MudTh>
+            <MudTh>Users</MudTh>
+            <MudTh>Features</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh>Valid Until</MudTh>
+            <MudTh>Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Name">@context.Name</MudTd>
+            <MudTd DataLabel="Identifier">
+                <MudChip T="string" Size="Size.Small" Color="Color.Default">@context.Identifier</MudChip>
+            </MudTd>
+            <MudTd DataLabel="Admin">@context.AdminEmail</MudTd>
+            <MudTd DataLabel="Users">@context.UserCount</MudTd>
+            <MudTd DataLabel="Features">@context.EnabledFeatureCount</MudTd>
+            <MudTd DataLabel="Status">
+                @if (context.IsActive)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Success">Active</MudChip>
+                }
+                else
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Error">Inactive</MudChip>
+                }
+            </MudTd>
+            <MudTd DataLabel="Valid Until">
+                @if (context.ValidUpto.HasValue)
+                {
+                    @context.ValidUpto.Value.ToLocalTime().ToString("d")
+                }
+                else
+                {
+                    <MudText Color="Color.Secondary">No expiry</MudText>
+                }
+            </MudTd>
+            <MudTd>
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                               OnClick="@(() => OpenEditDialog(context))" />
+                <MudIconButton Icon="@Icons.Material.Filled.ToggleOn" Size="Size.Small" Color="Color.Info"
+                               OnClick="@(() => OpenFeaturesDialog(context))" />
+                @if (context.IsActive)
+                {
+                    <MudIconButton Icon="@Icons.Material.Filled.Block" Size="Size.Small" Color="Color.Warning"
+                                   OnClick="@(() => DeactivateTenantAsync(context))" />
+                }
+                else
+                {
+                    <MudIconButton Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Color="Color.Success"
+                                   OnClick="@(() => ActivateTenantAsync(context))" />
+                }
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                               OnClick="@(() => DeleteTenantAsync(context))" />
+            </MudTd>
+        </RowTemplate>
+        <PagerContent>
+            <MudTablePager PageSizeOptions="new int[]{10, 25, 50, 100}" />
+        </PagerContent>
+    </MudTable>
+</MudPaper>
+
+@code {
+    private MudTable<TenantListResponse>? _table;
+    private bool _loading;
+    private string _searchTerm = "";
+    private bool? _isActiveFilter;
+
+    private async Task<TableData<TenantListResponse>> ServerReload(TableState state, CancellationToken token)
+    {
+        _loading = true;
+
+        var request = new TenantListRequest
+        {
+            SearchTerm = _searchTerm,
+            IsActive = _isActiveFilter,
+            PageNumber = state.Page + 1,
+            PageSize = state.PageSize,
+            SortBy = state.SortLabel ?? "Name",
+            SortDescending = state.SortDirection == SortDirection.Descending
+        };
+
+        var result = await TenantApiService.GetTenantsAsync(request);
+
+        _loading = false;
+
+        if (result.IsSuccess && result.Value != null)
+        {
+            return new TableData<TenantListResponse> { Items = result.Value.Items, TotalItems = result.Value.TotalCount };
+        }
+
+        return new TableData<TenantListResponse> { Items = Array.Empty<TenantListResponse>(), TotalItems = 0 };
+    }
+
+    private async Task LoadTenantsAsync()
+    {
+        if (_table != null)
+        {
+            await _table.ReloadServerData();
+        }
+    }
+
+    private async Task OpenCreateDialog()
+    {
+        var dialog = await DialogService.ShowAsync<TenantDialog>("Create Tenant");
+        var result = await dialog.Result;
+
+        if (result != null && !result.Canceled)
+        {
+            await LoadTenantsAsync();
+            Snackbar.Add("Tenant created successfully", Severity.Success);
+        }
+    }
+
+    private async Task OpenEditDialog(TenantListResponse tenant)
+    {
+        var parameters = new DialogParameters { ["TenantId"] = tenant.Id };
+        var dialog = await DialogService.ShowAsync<TenantDialog>("Edit Tenant", parameters);
+        var result = await dialog.Result;
+
+        if (result != null && !result.Canceled)
+        {
+            await LoadTenantsAsync();
+            Snackbar.Add("Tenant updated successfully", Severity.Success);
+        }
+    }
+
+    private async Task OpenFeaturesDialog(TenantListResponse tenant)
+    {
+        var parameters = new DialogParameters { ["TenantId"] = tenant.Id, ["TenantName"] = tenant.Name };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<TenantFeaturesDialog>("Manage Features", parameters, options);
+        var result = await dialog.Result;
+
+        if (result != null && !result.Canceled)
+        {
+            await LoadTenantsAsync();
+        }
+    }
+
+    private async Task ActivateTenantAsync(TenantListResponse tenant)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Confirm Activation",
+            $"Are you sure you want to activate tenant '{tenant.Name}'?",
+            yesText: "Activate", cancelText: "Cancel");
+
+        if (confirmed == true)
+        {
+            var result = await TenantApiService.ActivateTenantAsync(tenant.Id);
+            if (result.IsSuccess)
+            {
+                await LoadTenantsAsync();
+                Snackbar.Add("Tenant activated successfully", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add(result.Error ?? "Failed to activate tenant", Severity.Error);
+            }
+        }
+    }
+
+    private async Task DeactivateTenantAsync(TenantListResponse tenant)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Confirm Deactivation",
+            $"Are you sure you want to deactivate tenant '{tenant.Name}'? All users will lose access.",
+            yesText: "Deactivate", cancelText: "Cancel");
+
+        if (confirmed == true)
+        {
+            var result = await TenantApiService.DeactivateTenantAsync(tenant.Id);
+            if (result.IsSuccess)
+            {
+                await LoadTenantsAsync();
+                Snackbar.Add("Tenant deactivated successfully", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add(result.Error ?? "Failed to deactivate tenant", Severity.Error);
+            }
+        }
+    }
+
+    private async Task DeleteTenantAsync(TenantListResponse tenant)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Confirm Deletion",
+            $"Are you sure you want to delete tenant '{tenant.Name}'? This action cannot be undone and all associated data will be lost.",
+            yesText: "Delete", cancelText: "Cancel");
+
+        if (confirmed == true)
+        {
+            var result = await TenantApiService.DeleteTenantAsync(tenant.Id);
+            if (result.IsSuccess)
+            {
+                await LoadTenantsAsync();
+                Snackbar.Add("Tenant deleted successfully", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add(result.Error ?? "Failed to delete tenant", Severity.Error);
+            }
+        }
+    }
+}

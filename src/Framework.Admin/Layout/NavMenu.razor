@@ -1,0 +1,34 @@
+<MudNavMenu>
+    <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">
+        Dashboard
+    </MudNavLink>
+
+    <MudNavGroup Title="Identity" Icon="@Icons.Material.Filled.Security" Expanded="true">
+        <MudNavLink Href="/users" Icon="@Icons.Material.Filled.People">Users</MudNavLink>
+        <MudNavLink Href="/roles" Icon="@Icons.Material.Filled.AdminPanelSettings">Roles</MudNavLink>
+        <MudNavLink Href="/api-keys" Icon="@Icons.Material.Filled.Key">API Keys</MudNavLink>
+    </MudNavGroup>
+
+    <MudNavGroup Title="Multi-Tenancy" Icon="@Icons.Material.Filled.Business" Expanded="true">
+        <MudNavLink Href="/tenants" Icon="@Icons.Material.Filled.Apartment">Tenants</MudNavLink>
+    </MudNavGroup>
+
+    <MudNavGroup Title="Communication" Icon="@Icons.Material.Filled.Email" Expanded="false">
+        <MudNavLink Href="/email-templates" Icon="@Icons.Material.Filled.MarkEmailRead">Email Templates</MudNavLink>
+        <MudNavLink Href="/email-logs" Icon="@Icons.Material.Filled.SendAndArchive">Email Logs</MudNavLink>
+        <MudNavLink Href="/notifications" Icon="@Icons.Material.Filled.Notifications">Notifications</MudNavLink>
+    </MudNavGroup>
+
+    <MudNavGroup Title="Localization" Icon="@Icons.Material.Filled.Language" Expanded="false">
+        <MudNavLink Href="/languages" Icon="@Icons.Material.Filled.Translate">Languages</MudNavLink>
+        <MudNavLink Href="/resources" Icon="@Icons.Material.Filled.TextFields">Resources</MudNavLink>
+    </MudNavGroup>
+
+    <MudNavGroup Title="System" Icon="@Icons.Material.Filled.Settings" Expanded="false">
+        <MudNavLink Href="/settings" Icon="@Icons.Material.Filled.Tune">Settings</MudNavLink>
+        <MudNavLink Href="/audit-logs" Icon="@Icons.Material.Filled.History">Audit Logs</MudNavLink>
+        <MudNavLink Href="/background-jobs" Icon="@Icons.Material.Filled.WorkHistory">Background Jobs</MudNavLink>
+        <MudNavLink Href="/two-factor" Icon="@Icons.Material.Filled.Lock">Two-Factor Auth</MudNavLink>
+    </MudNavGroup>
+
+</MudNavMenu>

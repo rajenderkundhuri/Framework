@@ -1,0 +1,140 @@
+@inject IRoleApiService RoleApiService
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.AdminPanelSettings" Class="mr-2" />
+            @(RoleId.HasValue ? "Edit Role" : "Create Role")
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (_loading)
+        {
+            <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+        }
+        else
+        {
+            <MudForm @ref="_form" @bind-IsValid="_formValid">
+                <MudGrid>
+                    <MudItem xs="12">
+                        <MudTextField @bind-Value="_model.Name" Label="Name" Required="true"
+                                      RequiredError="Name is required" Variant="Variant.Outlined" />
+                    </MudItem>
+
+                    <MudItem xs="12">
+                        <MudTextField @bind-Value="_model.Description" Label="Description"
+                                      Variant="Variant.Outlined" Lines="3" />
+                    </MudItem>
+
+                    <MudItem xs="12">
+                        <MudCheckBox @bind-Value="_model.IsDefault" Label="Default Role"
+                                     Color="Color.Primary" />
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="ml-8">
+                            New users will be assigned to this role automatically
+                        </MudText>
+                    </MudItem>
+                </MudGrid>
+            </MudForm>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SubmitAsync"
+                   Disabled="@(!_formValid || _saving)">
+            @if (_saving)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Save
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public Guid? RoleId { get; set; }
+
+    private MudForm? _form;
+    private bool _formValid;
+    private bool _loading = true;
+    private bool _saving;
+    private RoleModel _model = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (RoleId.HasValue)
+        {
+            var result = await RoleApiService.GetRoleByIdAsync(RoleId.Value);
+            if (result.IsSuccess && result.Value != null)
+            {
+                var role = result.Value;
+                _model = new RoleModel
+                {
+                    Name = role.Name,
+                    Description = role.Description,
+                    IsDefault = role.IsDefault
+                };
+            }
+        }
+
+        _loading = false;
+    }
+
+    private async Task SubmitAsync()
+    {
+        if (_form != null)
+        {
+            await _form.Validate();
+            if (!_formValid) return;
+        }
+
+        _saving = true;
+
+        if (RoleId.HasValue)
+        {
+            var updateRequest = new UpdateRoleRequest
+            {
+                Name = _model.Name,
+                Description = _model.Description,
+                IsDefault = _model.IsDefault
+            };
+
+            var result = await RoleApiService.UpdateRoleAsync(RoleId.Value, updateRequest);
+            _saving = false;
+
+            if (result.IsSuccess)
+            {
+                MudDialog.Close(DialogResult.Ok(true));
+            }
+        }
+        else
+        {
+            var createRequest = new CreateRoleRequest
+            {
+                Name = _model.Name,
+                Description = _model.Description,
+                IsDefault = _model.IsDefault
+            };
+
+            var result = await RoleApiService.CreateRoleAsync(createRequest);
+            _saving = false;
+
+            if (result.IsSuccess)
+            {
+                MudDialog.Close(DialogResult.Ok(true));
+            }
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private class RoleModel
+    {
+        public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public bool IsDefault { get; set; }
+    }
+}

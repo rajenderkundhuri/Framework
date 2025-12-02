@@ -1,0 +1,211 @@
+@page "/audit-logs"
+@attribute [Authorize]
+@using Framework.Application.Auditing
+@using Framework.Domain.Auditing
+@inject IAuditLogApiService AuditLogService
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<PageTitle>Audit Logs</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Audit Logs</MudText>
+
+<MudPaper Class="pa-4 mb-4">
+    <MudGrid>
+        <MudItem xs="12" sm="6" md="3">
+            <MudTextField @bind-Value="_searchTerm" Label="Search" Variant="Variant.Outlined" Margin="Margin.Dense"
+                          Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.Search"
+                          OnKeyDown="@OnSearchKeyDown" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="2">
+            <MudSelect @bind-Value="_selectedAction" Label="Action" Variant="Variant.Outlined" Margin="Margin.Dense"
+                       Clearable="true">
+                @foreach (var action in _actions)
+                {
+                    <MudSelectItem Value="@((AuditAction?)action.Value)">@action.Name</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="2">
+            <MudSelect @bind-Value="_selectedEntityType" Label="Entity Type" Variant="Variant.Outlined" Margin="Margin.Dense"
+                       Clearable="true">
+                @foreach (var entityType in _entityTypes)
+                {
+                    <MudSelectItem Value="@entityType">@entityType</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="2">
+            <MudDatePicker @bind-Date="_fromDate" Label="From Date" Variant="Variant.Outlined" Margin="Margin.Dense"
+                           Clearable="true" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="2">
+            <MudDatePicker @bind-Date="_toDate" Label="To Date" Variant="Variant.Outlined" Margin="Margin.Dense"
+                           Clearable="true" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="1" Class="d-flex align-end">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="@SearchAsync" Class="mb-1">
+                Search
+            </MudButton>
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
+<MudTable @ref="_table" T="AuditLogDto" ServerData="@ServerReload" Dense="true" Hover="true"
+          Loading="_loading" LoadingProgressColor="Color.Primary">
+    <HeaderContent>
+        <MudTh>Timestamp</MudTh>
+        <MudTh>User</MudTh>
+        <MudTh>Action</MudTh>
+        <MudTh>Entity</MudTh>
+        <MudTh>Status</MudTh>
+        <MudTh>Details</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Timestamp">@context.Timestamp.ToLocalTime().ToString("g")</MudTd>
+        <MudTd DataLabel="User">@(context.UserName ?? "System")</MudTd>
+        <MudTd DataLabel="Action">
+            <MudChip T="string" Color="@GetActionColor(context.Action)" Size="Size.Small" Variant="Variant.Outlined">
+                @context.ActionName
+            </MudChip>
+        </MudTd>
+        <MudTd DataLabel="Entity">
+            <MudText Typo="Typo.body2">@context.EntityType</MudText>
+            @if (!string.IsNullOrEmpty(context.EntityId))
+            {
+                <MudText Typo="Typo.caption" Color="Color.Secondary">@context.EntityId</MudText>
+            }
+        </MudTd>
+        <MudTd DataLabel="Status">
+            @if (context.IsSuccess)
+            {
+                <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Small" />
+            }
+            else
+            {
+                <MudTooltip Text="@context.ErrorMessage">
+                    <MudIcon Icon="@Icons.Material.Filled.Error" Color="Color.Error" Size="Size.Small" />
+                </MudTooltip>
+            }
+        </MudTd>
+        <MudTd DataLabel="Details">
+            <MudIconButton Icon="@Icons.Material.Filled.Visibility" Size="Size.Small"
+                           OnClick="@(() => ShowDetailsAsync(context))" />
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <MudText>No audit logs found</MudText>
+    </NoRecordsContent>
+    <LoadingContent>
+        <MudText>Loading...</MudText>
+    </LoadingContent>
+    <PagerContent>
+        <MudTablePager PageSizeOptions="new int[] { 10, 25, 50, 100 }" />
+    </PagerContent>
+</MudTable>
+
+@code {
+    private MudTable<AuditLogDto>? _table;
+    private bool _loading;
+    private string? _searchTerm;
+    private AuditAction? _selectedAction;
+    private string? _selectedEntityType;
+    private DateTime? _fromDate;
+    private DateTime? _toDate;
+
+    private List<AuditActionInfo> _actions = new();
+    private List<string> _entityTypes = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadFiltersAsync();
+    }
+
+    private async Task LoadFiltersAsync()
+    {
+        var actionsResult = await AuditLogService.GetActionsAsync();
+        if (actionsResult.IsSuccess && actionsResult.Value != null)
+        {
+            _actions = actionsResult.Value.ToList();
+        }
+
+        var entityTypesResult = await AuditLogService.GetEntityTypesAsync();
+        if (entityTypesResult.IsSuccess && entityTypesResult.Value != null)
+        {
+            _entityTypes = entityTypesResult.Value.ToList();
+        }
+    }
+
+    private async Task<TableData<AuditLogDto>> ServerReload(TableState state, CancellationToken cancellationToken)
+    {
+        _loading = true;
+
+        var request = new AuditLogListRequest
+        {
+            SearchTerm = _searchTerm,
+            Action = _selectedAction,
+            EntityType = _selectedEntityType,
+            FromDate = _fromDate.HasValue ? new DateTimeOffset(_fromDate.Value, TimeSpan.Zero) : null,
+            ToDate = _toDate.HasValue ? new DateTimeOffset(_toDate.Value.AddDays(1), TimeSpan.Zero) : null,
+            PageNumber = state.Page + 1,
+            PageSize = state.PageSize > 0 ? state.PageSize : 10
+        };
+
+        var result = await AuditLogService.GetLogsAsync(request);
+
+        _loading = false;
+
+        if (result.IsSuccess && result.Value != null)
+        {
+            return new TableData<AuditLogDto>
+            {
+                TotalItems = result.Value.TotalCount,
+                Items = result.Value.Items
+            };
+        }
+
+        Snackbar.Add(result.Error ?? "Failed to load audit logs", Severity.Error);
+        return new TableData<AuditLogDto> { TotalItems = 0, Items = Enumerable.Empty<AuditLogDto>() };
+    }
+
+    private async Task SearchAsync()
+    {
+        if (_table != null)
+        {
+            await _table.ReloadServerData();
+        }
+    }
+
+    private async Task OnSearchKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await SearchAsync();
+        }
+    }
+
+    private Color GetActionColor(AuditAction action)
+    {
+        return action switch
+        {
+            AuditAction.Create => Color.Success,
+            AuditAction.Update => Color.Info,
+            AuditAction.Delete or AuditAction.SoftDelete => Color.Error,
+            AuditAction.Login => Color.Primary,
+            AuditAction.Logout => Color.Secondary,
+            AuditAction.FailedLogin => Color.Warning,
+            _ => Color.Default
+        };
+    }
+
+    private async Task ShowDetailsAsync(AuditLogDto log)
+    {
+        var parameters = new DialogParameters<AuditLogDetailDialog>
+        {
+            { x => x.AuditLog, log }
+        };
+
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true };
+        await DialogService.ShowAsync<AuditLogDetailDialog>("Audit Log Details", parameters, options);
+    }
+}

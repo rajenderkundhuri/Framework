@@ -1,0 +1,118 @@
+@inject IRoleApiService RoleApiService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Security" Class="mr-2" />
+            Permissions for @RoleName
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (_loading)
+        {
+            <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+        }
+        else
+        {
+            <MudText Class="mb-4">Select the permissions for this role:</MudText>
+
+            @foreach (var group in _permissionGroups)
+            {
+                <MudExpansionPanels Class="mb-2">
+                    <MudExpansionPanel Text="@group.DisplayName">
+                        <MudStack>
+                            @foreach (var permission in group.Permissions)
+                            {
+                                <MudCheckBox T="bool" Value="@_selectedPermissions.Contains(permission.Name)"
+                                             ValueChanged="@((bool val) => TogglePermission(permission.Name, val))"
+                                             Label="@permission.DisplayName" Color="Color.Primary" Dense="true">
+                                </MudCheckBox>
+                                @if (!string.IsNullOrEmpty(permission.Description))
+                                {
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="ml-8 mb-2">
+                                        @permission.Description
+                                    </MudText>
+                                }
+                            }
+                        </MudStack>
+                    </MudExpansionPanel>
+                </MudExpansionPanels>
+            }
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveAsync"
+                   Disabled="_saving">
+            @if (_saving)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Save Changes
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public Guid RoleId { get; set; }
+
+    [Parameter]
+    public string RoleName { get; set; } = string.Empty;
+
+    private bool _loading = true;
+    private bool _saving;
+    private List<PermissionGroupResponse> _permissionGroups = new();
+    private HashSet<string> _selectedPermissions = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Load all permission groups
+        var groupsResult = await RoleApiService.GetPermissionsByGroupAsync();
+        if (groupsResult.IsSuccess && groupsResult.Value != null)
+        {
+            _permissionGroups = groupsResult.Value.ToList();
+        }
+
+        // Load role's current permissions
+        var roleResult = await RoleApiService.GetRoleByIdAsync(RoleId);
+        if (roleResult.IsSuccess && roleResult.Value != null)
+        {
+            _selectedPermissions = roleResult.Value.Permissions.Select(p => p.Name).ToHashSet();
+        }
+
+        _loading = false;
+    }
+
+    private void TogglePermission(string permission, bool selected)
+    {
+        if (selected)
+            _selectedPermissions.Add(permission);
+        else
+            _selectedPermissions.Remove(permission);
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+
+        var result = await RoleApiService.SetRolePermissionsAsync(RoleId, _selectedPermissions);
+        _saving = false;
+
+        if (result.IsSuccess)
+        {
+            Snackbar.Add("Permissions updated successfully", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        else
+        {
+            Snackbar.Add(result.Error ?? "Failed to update permissions", Severity.Error);
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

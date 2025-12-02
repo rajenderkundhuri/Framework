@@ -1,0 +1,78 @@
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">Email Details</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudGrid>
+            <MudItem xs="12" sm="6">
+                <MudText Typo="Typo.caption" Color="Color.Secondary">To</MudText>
+                <MudText Typo="Typo.body1">@Log.To</MudText>
+            </MudItem>
+            @if (!string.IsNullOrEmpty(Log.Cc))
+            {
+                <MudItem xs="12" sm="6">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">CC</MudText>
+                    <MudText Typo="Typo.body1">@Log.Cc</MudText>
+                </MudItem>
+            }
+            <MudItem xs="12" sm="6">
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Status</MudText>
+                <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(Log.Status)">@Log.Status</MudChip>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Sent At</MudText>
+                <MudText Typo="Typo.body1">@Log.SentAt.ToLocalTime().ToString("g")</MudText>
+            </MudItem>
+            @if (!string.IsNullOrEmpty(Log.TemplateName))
+            {
+                <MudItem xs="12" sm="6">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Template</MudText>
+                    <MudText Typo="Typo.body1">@Log.TemplateName</MudText>
+                </MudItem>
+            }
+            @if (Log.RetryCount > 0)
+            {
+                <MudItem xs="12" sm="6">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Retry Count</MudText>
+                    <MudText Typo="Typo.body1">@Log.RetryCount</MudText>
+                </MudItem>
+            }
+            <MudItem xs="12">
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Subject</MudText>
+                <MudText Typo="Typo.body1">@Log.Subject</MudText>
+            </MudItem>
+            @if (!string.IsNullOrEmpty(Log.ErrorMessage))
+            {
+                <MudItem xs="12">
+                    <MudAlert Severity="Severity.Error">@Log.ErrorMessage</MudAlert>
+                </MudItem>
+            }
+            <MudItem xs="12">
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Body</MudText>
+                <MudPaper Class="pa-3 mt-2" Style="max-height: 300px; overflow-y: auto;" Elevation="0" Outlined="true">
+                    @((MarkupString)Log.Body)
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Close">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance? MudDialog { get; set; }
+    [Parameter] public EmailLogResponse Log { get; set; } = null!;
+
+    private void Close() => MudDialog?.Close();
+
+    private Color GetStatusColor(EmailStatus status) => status switch
+    {
+        EmailStatus.Sent => Color.Success,
+        EmailStatus.Pending => Color.Warning,
+        EmailStatus.Failed => Color.Error,
+        _ => Color.Default
+    };
+}

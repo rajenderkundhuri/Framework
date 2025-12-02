@@ -1,0 +1,129 @@
+@inject ITenantApiService TenantApiService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.ToggleOn" Class="mr-2" />
+            Features for @TenantName
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (_loading)
+        {
+            <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+        }
+        else
+        {
+            <MudTable Items="@_features" Dense="true" Hover="true">
+                <HeaderContent>
+                    <MudTh>Feature</MudTh>
+                    <MudTh>Enabled</MudTh>
+                    <MudTh>Expires</MudTh>
+                    <MudTh>Configuration</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Feature">
+                        <MudText Typo="Typo.body1">@context.DisplayName</MudText>
+                        @if (!string.IsNullOrEmpty(context.Description))
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">@context.Description</MudText>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Enabled">
+                        <MudSwitch T="bool" Value="@context.IsEnabled"
+                                   ValueChanged="@((bool val) => ToggleFeature(context, val))"
+                                   Color="Color.Primary" />
+                    </MudTd>
+                    <MudTd DataLabel="Expires">
+                        @if (context.ExpiresAt.HasValue)
+                        {
+                            @context.ExpiresAt.Value.ToLocalTime().ToString("d")
+                        }
+                        else
+                        {
+                            <MudText Color="Color.Secondary">Never</MudText>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Configuration">
+                        @if (!string.IsNullOrEmpty(context.Configuration))
+                        {
+                            <MudTooltip Text="@context.Configuration">
+                                <MudIcon Icon="@Icons.Material.Filled.Settings" Size="Size.Small" />
+                            </MudTooltip>
+                        }
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveAsync"
+                   Disabled="_saving">
+            @if (_saving)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Save Changes
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public Guid TenantId { get; set; }
+
+    [Parameter]
+    public string TenantName { get; set; } = string.Empty;
+
+    private bool _loading = true;
+    private bool _saving;
+    private List<TenantFeatureResponse> _features = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var result = await TenantApiService.GetTenantFeaturesAsync(TenantId);
+        if (result.IsSuccess && result.Value != null)
+        {
+            _features = result.Value.ToList();
+        }
+        _loading = false;
+    }
+
+    private void ToggleFeature(TenantFeatureResponse feature, bool enabled)
+    {
+        feature.IsEnabled = enabled;
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+
+        var featureRequests = _features.Select(f => new SetFeatureRequest
+        {
+            FeatureName = f.FeatureName,
+            IsEnabled = f.IsEnabled,
+            Configuration = f.Configuration,
+            ExpiresAt = f.ExpiresAt
+        });
+
+        var result = await TenantApiService.SetFeaturesAsync(TenantId, featureRequests);
+        _saving = false;
+
+        if (result.IsSuccess)
+        {
+            Snackbar.Add("Features updated successfully", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        else
+        {
+            Snackbar.Add(result.Error ?? "Failed to update features", Severity.Error);
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

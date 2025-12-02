@@ -1,0 +1,238 @@
+@page "/resources"
+@attribute [Authorize]
+@inject IResourceApiService ResourceApiService
+@inject ILanguageApiService LanguageApiService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Localization Resources</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Localization Resources</MudText>
+
+<MudPaper Class="pa-4" Elevation="2">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+        <MudStack Row="true" Spacing="2">
+            <MudTextField @bind-Value="_searchTerm" Placeholder="Search resources..." Variant="Variant.Outlined"
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                          Immediate="true" OnKeyUp="@(async e => { if (e.Key == "Enter") await LoadResourcesAsync(); })"
+                          Class="mr-2" Style="width: 250px;" />
+            <MudSelect T="string" @bind-Value="_cultureFilter" Label="Language" Variant="Variant.Outlined"
+                       Dense="true" Class="mr-2" Style="width: 180px;">
+                <MudSelectItem T="string" Value="@((string?)null)">All Languages</MudSelectItem>
+                @foreach (var lang in _languages)
+                {
+                    <MudSelectItem T="string" Value="@lang.CultureName">@lang.DisplayName</MudSelectItem>
+                }
+            </MudSelect>
+            <MudSelect T="string" @bind-Value="_groupFilter" Label="Group" Variant="Variant.Outlined"
+                       Dense="true" Class="mr-2" Style="width: 150px;">
+                <MudSelectItem T="string" Value="@((string?)null)">All Groups</MudSelectItem>
+                @foreach (var group in _groups)
+                {
+                    <MudSelectItem T="string" Value="@group">@group</MudSelectItem>
+                }
+            </MudSelect>
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="LoadResourcesAsync"
+                       StartIcon="@Icons.Material.Filled.Refresh">Search</MudButton>
+        </MudStack>
+        <MudStack Row="true" Spacing="2">
+            <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="OpenLanguagesDialog"
+                       StartIcon="@Icons.Material.Filled.Language">Languages</MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="OpenCreateDialog"
+                       StartIcon="@Icons.Material.Filled.Add">Add Resource</MudButton>
+        </MudStack>
+    </MudStack>
+
+    <MudTable @ref="_table" T="ResourceResponse" ServerData="@ServerReload" Dense="true" Hover="true"
+              Loading="_loading" LoadingProgressColor="Color.Primary">
+        <HeaderContent>
+            <MudTh><MudTableSortLabel SortLabel="Key" T="ResourceResponse">Key</MudTableSortLabel></MudTh>
+            <MudTh>Language</MudTh>
+            <MudTh>Value</MudTh>
+            <MudTh>Group</MudTh>
+            <MudTh>System</MudTh>
+            <MudTh><MudTableSortLabel SortLabel="LastModifiedAt" T="ResourceResponse">Modified</MudTableSortLabel></MudTh>
+            <MudTh>Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Key">
+                <MudText Typo="Typo.body2" Class="font-weight-medium">@context.Key</MudText>
+            </MudTd>
+            <MudTd DataLabel="Language">
+                <MudChip T="string" Size="Size.Small" Color="Color.Info">@context.CultureName</MudChip>
+            </MudTd>
+            <MudTd DataLabel="Value">
+                <MudText Typo="Typo.body2" Style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                    @context.Value
+                </MudText>
+            </MudTd>
+            <MudTd DataLabel="Group">
+                @if (!string.IsNullOrEmpty(context.Group))
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Default">@context.Group</MudChip>
+                }
+            </MudTd>
+            <MudTd DataLabel="System">
+                @if (context.IsSystem)
+                {
+                    <MudIcon Icon="@Icons.Material.Filled.Lock" Size="Size.Small" Color="Color.Warning" />
+                }
+            </MudTd>
+            <MudTd DataLabel="Modified">
+                @if (context.LastModifiedAt.HasValue)
+                {
+                    @context.LastModifiedAt.Value.ToLocalTime().ToString("g")
+                }
+                else
+                {
+                    @context.CreatedAt.ToLocalTime().ToString("g")
+                }
+            </MudTd>
+            <MudTd>
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                               OnClick="@(() => OpenEditDialog(context))" Disabled="@context.IsSystem" />
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                               OnClick="@(() => DeleteResourceAsync(context))" Disabled="@context.IsSystem" />
+            </MudTd>
+        </RowTemplate>
+        <PagerContent>
+            <MudTablePager PageSizeOptions="new int[]{25, 50, 100, 200}" />
+        </PagerContent>
+    </MudTable>
+</MudPaper>
+
+@code {
+    private MudTable<ResourceResponse>? _table;
+    private bool _loading;
+    private string _searchTerm = "";
+    private string? _cultureFilter;
+    private string? _groupFilter;
+    private List<LanguageResponse> _languages = new();
+    private List<string> _groups = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadFiltersAsync();
+    }
+
+    private async Task LoadFiltersAsync()
+    {
+        var languagesResult = await LanguageApiService.GetLanguagesAsync();
+        if (languagesResult.IsSuccess && languagesResult.Value != null)
+        {
+            _languages = languagesResult.Value.OrderBy(l => l.DisplayName).ToList();
+        }
+
+        var groupsResult = await ResourceApiService.GetResourceGroupsAsync();
+        if (groupsResult.IsSuccess && groupsResult.Value != null)
+        {
+            _groups = groupsResult.Value.OrderBy(g => g).ToList();
+        }
+    }
+
+    private async Task<TableData<ResourceResponse>> ServerReload(TableState state, CancellationToken token)
+    {
+        _loading = true;
+
+        var request = new ResourceListRequest
+        {
+            SearchTerm = _searchTerm,
+            CultureName = _cultureFilter,
+            Group = _groupFilter,
+            PageNumber = state.Page + 1,
+            PageSize = state.PageSize,
+            SortBy = state.SortLabel ?? "Key",
+            SortDescending = state.SortDirection == SortDirection.Descending
+        };
+
+        var result = await ResourceApiService.GetResourcesAsync(request);
+
+        _loading = false;
+
+        if (result.IsSuccess && result.Value != null)
+        {
+            return new TableData<ResourceResponse> { Items = result.Value.Items, TotalItems = result.Value.TotalCount };
+        }
+
+        return new TableData<ResourceResponse> { Items = Array.Empty<ResourceResponse>(), TotalItems = 0 };
+    }
+
+    private async Task LoadResourcesAsync()
+    {
+        if (_table != null)
+        {
+            await _table.ReloadServerData();
+        }
+    }
+
+    private async Task OpenCreateDialog()
+    {
+        var parameters = new DialogParameters
+        {
+            ["Languages"] = _languages,
+            ["Groups"] = _groups
+        };
+        var dialog = await DialogService.ShowAsync<ResourceDialog>("Create Resource", parameters);
+        var result = await dialog.Result;
+
+        if (result != null && !result.Canceled)
+        {
+            await LoadFiltersAsync();
+            await LoadResourcesAsync();
+            Snackbar.Add("Resource created successfully", Severity.Success);
+        }
+    }
+
+    private async Task OpenEditDialog(ResourceResponse resource)
+    {
+        var parameters = new DialogParameters
+        {
+            ["ResourceId"] = resource.Id,
+            ["Languages"] = _languages,
+            ["Groups"] = _groups
+        };
+        var dialog = await DialogService.ShowAsync<ResourceDialog>("Edit Resource", parameters);
+        var result = await dialog.Result;
+
+        if (result != null && !result.Canceled)
+        {
+            await LoadResourcesAsync();
+            Snackbar.Add("Resource updated successfully", Severity.Success);
+        }
+    }
+
+    private async Task OpenLanguagesDialog()
+    {
+        var dialog = await DialogService.ShowAsync<LanguagesDialog>("Manage Languages",
+            new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true });
+        var result = await dialog.Result;
+
+        if (result != null && !result.Canceled)
+        {
+            await LoadFiltersAsync();
+            await LoadResourcesAsync();
+        }
+    }
+
+    private async Task DeleteResourceAsync(ResourceResponse resource)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Confirm Deletion",
+            $"Are you sure you want to delete resource '{resource.Key}' ({resource.CultureName})? This action cannot be undone.",
+            yesText: "Delete", cancelText: "Cancel");
+
+        if (confirmed == true)
+        {
+            var result = await ResourceApiService.DeleteResourceAsync(resource.Id);
+            if (result.IsSuccess)
+            {
+                await LoadResourcesAsync();
+                Snackbar.Add("Resource deleted successfully", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add(result.Error ?? "Failed to delete resource", Severity.Error);
+            }
+        }
+    }
+}

@@ -1,0 +1,97 @@
+@page "/login"
+@layout Layout.EmptyLayout
+@inject IAuthService AuthService
+@inject IThemeService ThemeService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<PageTitle>Login</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="d-flex align-center" Style="height: 100vh;">
+    <MudPaper Elevation="4" Class="pa-8 mx-auto" Style="width: 100%; max-width: 400px;">
+        <MudStack Spacing="4">
+            <MudText Typo="Typo.h4" Align="Align.Center" Class="mb-2">Framework Admin</MudText>
+            <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Secondary">
+                Sign in to your account
+            </MudText>
+
+            <MudForm @ref="_form" @bind-IsValid="_formValid">
+                <MudTextField @bind-Value="_model.Email" Label="Email" Variant="Variant.Outlined"
+                              InputType="InputType.Email" Required="true"
+                              RequiredError="Email is required" Class="mb-4" />
+
+                <MudTextField @bind-Value="_model.Password" Label="Password" Variant="Variant.Outlined"
+                              InputType="InputType.Password" Required="true"
+                              RequiredError="Password is required" Class="mb-4" />
+
+                <MudCheckBox @bind-Value="_model.RememberMe" Label="Remember me" Color="Color.Primary"
+                             Class="mb-4" />
+
+                @if (!string.IsNullOrEmpty(_errorMessage))
+                {
+                    <MudAlert Severity="Severity.Error" Class="mb-4">@_errorMessage</MudAlert>
+                }
+
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true"
+                           OnClick="LoginAsync" Disabled="@(!_formValid || _loading)">
+                    @if (_loading)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    }
+                    Sign In
+                </MudButton>
+            </MudForm>
+        </MudStack>
+    </MudPaper>
+</MudContainer>
+
+@code {
+    private MudForm? _form;
+    private bool _formValid;
+    private bool _loading;
+    private string? _errorMessage;
+    private LoginModel _model = new();
+
+    [SupplyParameterFromQuery]
+    public string? ReturnUrl { get; set; }
+
+    private async Task LoginAsync()
+    {
+        if (_form != null)
+        {
+            await _form.Validate();
+            if (!_formValid) return;
+        }
+
+        _loading = true;
+        _errorMessage = null;
+
+        var result = await AuthService.LoginAsync(new LoginRequest
+        {
+            Email = _model.Email,
+            Password = _model.Password,
+            RememberMe = _model.RememberMe
+        });
+
+        _loading = false;
+
+        if (result.Succeeded)
+        {
+            // Load user's theme preferences from server
+            await ThemeService.LoadFromServerAsync();
+            Snackbar.Add("Login successful", Severity.Success);
+            Navigation.NavigateTo(ReturnUrl ?? "/", true);
+        }
+        else
+        {
+            _errorMessage = result.Error ?? "Invalid email or password";
+        }
+    }
+
+    private class LoginModel
+    {
+        public string Email { get; set; } = string.Empty;
+        public string Password { get; set; } = string.Empty;
+        public bool RememberMe { get; set; }
+    }
+}

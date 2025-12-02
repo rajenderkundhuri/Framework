@@ -1,0 +1,235 @@
+@page "/users"
+@attribute [Authorize]
+@inject IUserApiService UserApiService
+@inject IRoleApiService RoleApiService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Users</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">User Management</MudText>
+
+<MudPaper Class="pa-4" Elevation="2">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+        <MudStack Row="true" Spacing="2">
+            <MudTextField @bind-Value="_searchTerm" Placeholder="Search users..." Variant="Variant.Outlined"
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                          Immediate="true" OnKeyUp="@(async e => { if (e.Key == "Enter") await LoadUsersAsync(); })"
+                          Class="mr-2" Style="width: 300px;" />
+            <MudSelect T="bool?" @bind-Value="_isActiveFilter" Label="Status" Variant="Variant.Outlined"
+                       Dense="true" Class="mr-2" Style="width: 150px;">
+                <MudSelectItem T="bool?" Value="@((bool?)null)">All</MudSelectItem>
+                <MudSelectItem T="bool?" Value="@true">Active</MudSelectItem>
+                <MudSelectItem T="bool?" Value="@false">Inactive</MudSelectItem>
+            </MudSelect>
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="LoadUsersAsync"
+                       StartIcon="@Icons.Material.Filled.Refresh">Search</MudButton>
+        </MudStack>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="OpenCreateDialog"
+                   StartIcon="@Icons.Material.Filled.Add">Add User</MudButton>
+    </MudStack>
+
+    <MudTable @ref="_table" T="UserListResponse" ServerData="@ServerReload" Dense="true" Hover="true"
+              Loading="_loading" LoadingProgressColor="Color.Primary">
+        <HeaderContent>
+            <MudTh><MudTableSortLabel SortLabel="Email" T="UserListResponse">Email</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortLabel="FullName" T="UserListResponse">Name</MudTableSortLabel></MudTh>
+            <MudTh>Roles</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh><MudTableSortLabel SortLabel="CreatedAt" T="UserListResponse">Created</MudTableSortLabel></MudTh>
+            <MudTh>Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Email">@context.Email</MudTd>
+            <MudTd DataLabel="Name">@context.FullName</MudTd>
+            <MudTd DataLabel="Roles">
+                @foreach (var role in context.Roles.Take(3))
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Info">@role</MudChip>
+                }
+                @if (context.Roles.Count > 3)
+                {
+                    <MudChip T="string" Size="Size.Small">+@(context.Roles.Count - 3)</MudChip>
+                }
+            </MudTd>
+            <MudTd DataLabel="Status">
+                @if (context.IsActive)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Success">Active</MudChip>
+                }
+                else
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Error">Inactive</MudChip>
+                }
+            </MudTd>
+            <MudTd DataLabel="Created">@context.CreatedAt.ToLocalTime().ToString("g")</MudTd>
+            <MudTd>
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                               OnClick="@(() => OpenEditDialog(context))" />
+                <MudIconButton Icon="@Icons.Material.Filled.Security" Size="Size.Small" Color="Color.Info"
+                               OnClick="@(() => OpenRolesDialog(context))" />
+                @if (context.IsActive)
+                {
+                    <MudIconButton Icon="@Icons.Material.Filled.Block" Size="Size.Small" Color="Color.Warning"
+                                   OnClick="@(() => DeactivateUserAsync(context))" />
+                }
+                else
+                {
+                    <MudIconButton Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Color="Color.Success"
+                                   OnClick="@(() => ActivateUserAsync(context))" />
+                }
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                               OnClick="@(() => DeleteUserAsync(context))" />
+            </MudTd>
+        </RowTemplate>
+        <PagerContent>
+            <MudTablePager PageSizeOptions="new int[]{10, 25, 50, 100}" />
+        </PagerContent>
+    </MudTable>
+</MudPaper>
+
+@code {
+    private MudTable<UserListResponse>? _table;
+    private bool _loading;
+    private string _searchTerm = "";
+    private bool? _isActiveFilter;
+    private int _totalItems;
+
+    private async Task<TableData<UserListResponse>> ServerReload(TableState state, CancellationToken token)
+    {
+        _loading = true;
+
+        var request = new UserListRequest
+        {
+            SearchTerm = _searchTerm,
+            IsActive = _isActiveFilter,
+            PageNumber = state.Page + 1,
+            PageSize = state.PageSize,
+            SortBy = state.SortLabel ?? "CreatedAt",
+            SortDescending = state.SortDirection == SortDirection.Descending
+        };
+
+        var result = await UserApiService.GetUsersAsync(request);
+
+        _loading = false;
+
+        if (result.IsSuccess && result.Value != null)
+        {
+            _totalItems = result.Value.TotalCount;
+            return new TableData<UserListResponse> { Items = result.Value.Items, TotalItems = result.Value.TotalCount };
+        }
+
+        return new TableData<UserListResponse> { Items = Array.Empty<UserListResponse>(), TotalItems = 0 };
+    }
+
+    private async Task LoadUsersAsync()
+    {
+        if (_table != null)
+        {
+            await _table.ReloadServerData();
+        }
+    }
+
+    private async Task OpenCreateDialog()
+    {
+        var dialog = await DialogService.ShowAsync<UserDialog>("Create User");
+        var result = await dialog.Result;
+
+        if (result != null && !result.Canceled)
+        {
+            await LoadUsersAsync();
+            Snackbar.Add("User created successfully", Severity.Success);
+        }
+    }
+
+    private async Task OpenEditDialog(UserListResponse user)
+    {
+        var parameters = new DialogParameters { ["UserId"] = user.Id };
+        var dialog = await DialogService.ShowAsync<UserDialog>("Edit User", parameters);
+        var result = await dialog.Result;
+
+        if (result != null && !result.Canceled)
+        {
+            await LoadUsersAsync();
+            Snackbar.Add("User updated successfully", Severity.Success);
+        }
+    }
+
+    private async Task OpenRolesDialog(UserListResponse user)
+    {
+        var parameters = new DialogParameters { ["UserId"] = user.Id, ["UserEmail"] = user.Email };
+        var dialog = await DialogService.ShowAsync<UserRolesDialog>("Manage Roles", parameters);
+        var result = await dialog.Result;
+
+        if (result != null && !result.Canceled)
+        {
+            await LoadUsersAsync();
+        }
+    }
+
+    private async Task ActivateUserAsync(UserListResponse user)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Confirm Activation",
+            $"Are you sure you want to activate user {user.Email}?",
+            yesText: "Activate", cancelText: "Cancel");
+
+        if (confirmed == true)
+        {
+            var result = await UserApiService.ActivateUserAsync(user.Id);
+            if (result.IsSuccess)
+            {
+                await LoadUsersAsync();
+                Snackbar.Add("User activated successfully", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add(result.Error ?? "Failed to activate user", Severity.Error);
+            }
+        }
+    }
+
+    private async Task DeactivateUserAsync(UserListResponse user)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Confirm Deactivation",
+            $"Are you sure you want to deactivate user {user.Email}?",
+            yesText: "Deactivate", cancelText: "Cancel");
+
+        if (confirmed == true)
+        {
+            var result = await UserApiService.DeactivateUserAsync(user.Id);
+            if (result.IsSuccess)
+            {
+                await LoadUsersAsync();
+                Snackbar.Add("User deactivated successfully", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add(result.Error ?? "Failed to deactivate user", Severity.Error);
+            }
+        }
+    }
+
+    private async Task DeleteUserAsync(UserListResponse user)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Confirm Deletion",
+            $"Are you sure you want to delete user {user.Email}? This action cannot be undone.",
+            yesText: "Delete", cancelText: "Cancel");
+
+        if (confirmed == true)
+        {
+            var result = await UserApiService.DeleteUserAsync(user.Id);
+            if (result.IsSuccess)
+            {
+                await LoadUsersAsync();
+                Snackbar.Add("User deleted successfully", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add(result.Error ?? "Failed to delete user", Severity.Error);
+            }
+        }
+    }
+}

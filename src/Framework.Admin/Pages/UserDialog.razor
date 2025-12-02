@@ -1,0 +1,196 @@
+@inject IUserApiService UserApiService
+@inject IRoleApiService RoleApiService
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Person" Class="mr-2" />
+            @(UserId.HasValue ? "Edit User" : "Create User")
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (_loading)
+        {
+            <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+        }
+        else
+        {
+            <MudForm @ref="_form" @bind-IsValid="_formValid">
+                <MudGrid>
+                    <MudItem xs="12">
+                        <MudTextField @bind-Value="_model.Email" Label="Email" Required="true"
+                                      RequiredError="Email is required" Variant="Variant.Outlined"
+                                      InputType="InputType.Email" Disabled="@UserId.HasValue" />
+                    </MudItem>
+
+                    @if (!UserId.HasValue)
+                    {
+                        <MudItem xs="12">
+                            <MudTextField @bind-Value="_model.Password" Label="Password" Required="true"
+                                          RequiredError="Password is required" Variant="Variant.Outlined"
+                                          InputType="InputType.Password" />
+                        </MudItem>
+                    }
+
+                    <MudItem xs="12" md="6">
+                        <MudTextField @bind-Value="_model.FirstName" Label="First Name"
+                                      Variant="Variant.Outlined" />
+                    </MudItem>
+
+                    <MudItem xs="12" md="6">
+                        <MudTextField @bind-Value="_model.LastName" Label="Last Name"
+                                      Variant="Variant.Outlined" />
+                    </MudItem>
+
+                    <MudItem xs="12">
+                        <MudTextField @bind-Value="_model.PhoneNumber" Label="Phone Number"
+                                      Variant="Variant.Outlined" InputType="InputType.Telephone" />
+                    </MudItem>
+
+                    @if (!UserId.HasValue)
+                    {
+                        <MudItem xs="12">
+                            <MudSelect T="Guid" Label="Roles" MultiSelection="true"
+                                       @bind-SelectedValues="_selectedRoleIds"
+                                       Variant="Variant.Outlined" Dense="true">
+                                @foreach (var role in _roles)
+                                {
+                                    <MudSelectItem T="Guid" Value="@role.Id">@role.Name</MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudItem>
+
+                        <MudItem xs="12">
+                            <MudCheckBox @bind-Value="_model.IsActive" Label="Active" Color="Color.Primary" />
+                        </MudItem>
+
+                        <MudItem xs="12">
+                            <MudCheckBox @bind-Value="_model.SendWelcomeEmail" Label="Send Welcome Email" Color="Color.Primary" />
+                        </MudItem>
+                    }
+                </MudGrid>
+            </MudForm>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SubmitAsync"
+                   Disabled="@(!_formValid || _saving)">
+            @if (_saving)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Save
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public Guid? UserId { get; set; }
+
+    private MudForm? _form;
+    private bool _formValid;
+    private bool _loading = true;
+    private bool _saving;
+    private UserModel _model = new();
+    private List<RoleListResponse> _roles = new();
+    private IEnumerable<Guid> _selectedRoleIds = new List<Guid>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Load roles
+        var rolesResult = await RoleApiService.GetRolesAsync(new RoleListRequest { PageSize = 100 });
+        if (rolesResult.IsSuccess && rolesResult.Value != null)
+        {
+            _roles = rolesResult.Value.Items.ToList();
+        }
+
+        // Load user if editing
+        if (UserId.HasValue)
+        {
+            var userResult = await UserApiService.GetUserByIdAsync(UserId.Value);
+            if (userResult.IsSuccess && userResult.Value != null)
+            {
+                var user = userResult.Value;
+                _model = new UserModel
+                {
+                    Email = user.Email,
+                    FirstName = user.FirstName,
+                    LastName = user.LastName,
+                    PhoneNumber = user.PhoneNumber,
+                    IsActive = user.IsActive
+                };
+            }
+        }
+
+        _loading = false;
+    }
+
+    private async Task SubmitAsync()
+    {
+        if (_form != null)
+        {
+            await _form.Validate();
+            if (!_formValid) return;
+        }
+
+        _saving = true;
+
+        if (UserId.HasValue)
+        {
+            var updateRequest = new UpdateUserRequest
+            {
+                FirstName = _model.FirstName,
+                LastName = _model.LastName,
+                PhoneNumber = _model.PhoneNumber
+            };
+
+            var result = await UserApiService.UpdateUserAsync(UserId.Value, updateRequest);
+            _saving = false;
+
+            if (result.IsSuccess)
+            {
+                MudDialog.Close(DialogResult.Ok(true));
+            }
+        }
+        else
+        {
+            var createRequest = new CreateUserRequest
+            {
+                Email = _model.Email,
+                Password = _model.Password,
+                FirstName = _model.FirstName,
+                LastName = _model.LastName,
+                PhoneNumber = _model.PhoneNumber,
+                IsActive = _model.IsActive,
+                SendWelcomeEmail = _model.SendWelcomeEmail,
+                RoleIds = _selectedRoleIds.ToList()
+            };
+
+            var result = await UserApiService.CreateUserAsync(createRequest);
+            _saving = false;
+
+            if (result.IsSuccess)
+            {
+                MudDialog.Close(DialogResult.Ok(true));
+            }
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private class UserModel
+    {
+        public string Email { get; set; } = string.Empty;
+        public string Password { get; set; } = string.Empty;
+        public string? FirstName { get; set; }
+        public string? LastName { get; set; }
+        public string? PhoneNumber { get; set; }
+        public bool IsActive { get; set; } = true;
+        public bool SendWelcomeEmail { get; set; } = true;
+    }
+}

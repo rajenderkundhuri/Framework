@@ -1,0 +1,218 @@
+@page "/profile"
+@attribute [Authorize]
+@using Framework.Application.Identity.Models
+@inject IProfileApiService ProfileService
+@inject ISnackbar Snackbar
+
+<PageTitle>Profile</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">My Profile</MudText>
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+}
+else if (_profile != null)
+{
+    <MudGrid>
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4">
+                <MudText Typo="Typo.h6" Class="mb-4">Profile Information</MudText>
+
+                <MudTextField @bind-Value="_firstName" Label="First Name" Variant="Variant.Outlined" Class="mb-3" />
+                <MudTextField @bind-Value="_lastName" Label="Last Name" Variant="Variant.Outlined" Class="mb-3" />
+                <MudTextField Value="@_profile.Email" Label="Email" Variant="Variant.Outlined" Class="mb-3" ReadOnly="true" />
+                <MudTextField @bind-Value="_phoneNumber" Label="Phone Number" Variant="Variant.Outlined" Class="mb-3" />
+
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="UpdateProfileAsync"
+                           Disabled="_savingProfile">
+                    @if (_savingProfile)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    }
+                    Save Changes
+                </MudButton>
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4">
+                <MudText Typo="Typo.h6" Class="mb-4">Change Password</MudText>
+
+                <MudTextField @bind-Value="_currentPassword" Label="Current Password"
+                              Variant="Variant.Outlined" Class="mb-3"
+                              InputType="@(_showCurrentPassword ? InputType.Text : InputType.Password)"
+                              Adornment="Adornment.End" AdornmentIcon="@(_showCurrentPassword ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                              OnAdornmentClick="() => _showCurrentPassword = !_showCurrentPassword" />
+
+                <MudTextField @bind-Value="_newPassword" Label="New Password"
+                              Variant="Variant.Outlined" Class="mb-3"
+                              InputType="@(_showNewPassword ? InputType.Text : InputType.Password)"
+                              Adornment="Adornment.End" AdornmentIcon="@(_showNewPassword ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                              OnAdornmentClick="() => _showNewPassword = !_showNewPassword" />
+
+                <MudTextField @bind-Value="_confirmPassword" Label="Confirm New Password"
+                              Variant="Variant.Outlined" Class="mb-3"
+                              InputType="@(_showConfirmPassword ? InputType.Text : InputType.Password)"
+                              Adornment="Adornment.End" AdornmentIcon="@(_showConfirmPassword ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                              OnAdornmentClick="() => _showConfirmPassword = !_showConfirmPassword" />
+
+                <MudButton Variant="Variant.Filled" Color="Color.Secondary" OnClick="ChangePasswordAsync"
+                           Disabled="_changingPassword">
+                    @if (_changingPassword)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    }
+                    Change Password
+                </MudButton>
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4">
+                <MudText Typo="Typo.h6" Class="mb-4">Roles & Permissions</MudText>
+
+                <MudText Typo="Typo.subtitle2" Class="mb-2">Roles</MudText>
+                <MudChipSet T="string" Class="mb-4">
+                    @foreach (var role in _profile.Roles)
+                    {
+                        <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined">@role</MudChip>
+                    }
+                </MudChipSet>
+
+                <MudText Typo="Typo.subtitle2" Class="mb-2">Permissions</MudText>
+                <MudChipSet T="string">
+                    @foreach (var permission in _profile.Permissions.Take(10))
+                    {
+                        <MudChip T="string" Color="Color.Secondary" Variant="Variant.Text" Size="Size.Small">@permission</MudChip>
+                    }
+                    @if (_profile.Permissions.Count() > 10)
+                    {
+                        <MudChip T="string" Color="Color.Default" Variant="Variant.Text" Size="Size.Small">+@(_profile.Permissions.Count() - 10) more</MudChip>
+                    }
+                </MudChipSet>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    private bool _loading = true;
+    private bool _savingProfile;
+    private bool _changingPassword;
+    private UserProfileResponse? _profile;
+
+    private string _firstName = string.Empty;
+    private string _lastName = string.Empty;
+    private string? _phoneNumber;
+
+    private string _currentPassword = string.Empty;
+    private string _newPassword = string.Empty;
+    private string _confirmPassword = string.Empty;
+
+    private bool _showCurrentPassword;
+    private bool _showNewPassword;
+    private bool _showConfirmPassword;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadProfileAsync();
+    }
+
+    private async Task LoadProfileAsync()
+    {
+        _loading = true;
+        var result = await ProfileService.GetProfileAsync();
+
+        if (result.IsSuccess && result.Value != null)
+        {
+            _profile = result.Value;
+            _firstName = _profile.FirstName;
+            _lastName = _profile.LastName;
+            _phoneNumber = _profile.PhoneNumber;
+        }
+        else
+        {
+            Snackbar.Add(result.Error ?? "Failed to load profile", Severity.Error);
+        }
+
+        _loading = false;
+    }
+
+    private async Task UpdateProfileAsync()
+    {
+        _savingProfile = true;
+
+        var request = new UpdateProfileRequest
+        {
+            FirstName = _firstName,
+            LastName = _lastName,
+            PhoneNumber = _phoneNumber
+        };
+
+        var result = await ProfileService.UpdateProfileAsync(request);
+
+        if (result.IsSuccess)
+        {
+            Snackbar.Add("Profile updated successfully", Severity.Success);
+            await LoadProfileAsync();
+        }
+        else
+        {
+            Snackbar.Add(result.Error ?? "Failed to update profile", Severity.Error);
+        }
+
+        _savingProfile = false;
+    }
+
+    private async Task ChangePasswordAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_currentPassword))
+        {
+            Snackbar.Add("Current password is required", Severity.Warning);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_newPassword))
+        {
+            Snackbar.Add("New password is required", Severity.Warning);
+            return;
+        }
+
+        if (_newPassword != _confirmPassword)
+        {
+            Snackbar.Add("Passwords do not match", Severity.Warning);
+            return;
+        }
+
+        if (_newPassword.Length < 6)
+        {
+            Snackbar.Add("Password must be at least 6 characters", Severity.Warning);
+            return;
+        }
+
+        _changingPassword = true;
+
+        var request = new ChangePasswordRequest
+        {
+            CurrentPassword = _currentPassword,
+            NewPassword = _newPassword
+        };
+
+        var result = await ProfileService.ChangePasswordAsync(request);
+
+        if (result.IsSuccess)
+        {
+            Snackbar.Add("Password changed successfully", Severity.Success);
+            _currentPassword = string.Empty;
+            _newPassword = string.Empty;
+            _confirmPassword = string.Empty;
+        }
+        else
+        {
+            Snackbar.Add(result.Error ?? "Failed to change password", Severity.Error);
+        }
+
+        _changingPassword = false;
+    }
+}

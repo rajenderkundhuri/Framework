@@ -1,0 +1,122 @@
+@inject IApiKeyApiService ApiKeyApiService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Key" Class="mr-2" />
+            @(ApiKeyId.HasValue ? "Edit API Key" : "Create API Key")
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudForm @ref="_form" @bind-IsValid="@_formValid">
+            <MudTextField @bind-Value="_name" Label="Name" Variant="Variant.Outlined" Class="mb-3"
+                          Required="true" RequiredError="Name is required"
+                          HelperText="A descriptive name for this API key" />
+            <MudDatePicker @bind-Date="_expiresAt" Label="Expiration Date (optional)" Variant="Variant.Outlined" Class="mb-3"
+                           HelperText="Leave empty for no expiration" MinDate="DateTime.Today.AddDays(1)" />
+            <MudTextField @bind-Value="_scopesText" Label="Scopes (optional)" Variant="Variant.Outlined" Class="mb-3"
+                          HelperText="Comma-separated list of scopes" />
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" OnClick="Submit" Disabled="@(!_formValid || _saving)">
+            @if (_saving)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            @(ApiKeyId.HasValue ? "Save" : "Create")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance? MudDialog { get; set; }
+    [Parameter] public Guid? ApiKeyId { get; set; }
+
+    private MudForm? _form;
+    private bool _formValid;
+    private bool _saving;
+
+    private string _name = "";
+    private DateTime? _expiresAt;
+    private string _scopesText = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (ApiKeyId.HasValue)
+        {
+            var result = await ApiKeyApiService.GetByIdAsync(ApiKeyId.Value);
+            if (result.IsSuccess && result.Value != null)
+            {
+                _name = result.Value.Name;
+                _expiresAt = result.Value.ExpiresAt?.LocalDateTime;
+                _scopesText = string.Join(", ", result.Value.Scopes);
+            }
+        }
+    }
+
+    private void Cancel() => MudDialog?.Cancel();
+
+    private async Task Submit()
+    {
+        if (_form != null)
+        {
+            await _form.Validate();
+            if (!_formValid) return;
+        }
+
+        _saving = true;
+
+        try
+        {
+            var scopes = string.IsNullOrWhiteSpace(_scopesText)
+                ? null
+                : _scopesText.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+
+            if (ApiKeyId.HasValue)
+            {
+                var request = new UpdateApiKeyRequest
+                {
+                    Name = _name,
+                    ExpiresAt = _expiresAt.HasValue ? new DateTimeOffset(_expiresAt.Value) : null,
+                    Scopes = scopes
+                };
+
+                var result = await ApiKeyApiService.UpdateAsync(ApiKeyId.Value, request);
+                if (result.IsSuccess)
+                {
+                    MudDialog?.Close(DialogResult.Ok(true));
+                }
+                else
+                {
+                    Snackbar.Add(result.Error ?? "Failed to update API key", Severity.Error);
+                }
+            }
+            else
+            {
+                var request = new CreateApiKeyRequest
+                {
+                    Name = _name,
+                    ExpiresAt = _expiresAt.HasValue ? new DateTimeOffset(_expiresAt.Value) : null,
+                    Scopes = scopes
+                };
+
+                var result = await ApiKeyApiService.CreateMyApiKeyAsync(request);
+                if (result.IsSuccess && result.Value != null)
+                {
+                    MudDialog?.Close(DialogResult.Ok(result.Value));
+                }
+                else
+                {
+                    Snackbar.Add(result.Error ?? "Failed to create API key", Severity.Error);
+                }
+            }
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

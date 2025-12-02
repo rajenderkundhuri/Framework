@@ -1,0 +1,137 @@
+@inject IUserApiService UserApiService
+@inject IRoleApiService RoleApiService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Security" Class="mr-2" />
+            Manage Roles for @UserEmail
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (_loading)
+        {
+            <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+        }
+        else
+        {
+            <MudText Class="mb-4">Select the roles to assign to this user:</MudText>
+            <MudGrid>
+                @foreach (var role in _allRoles)
+                {
+                    <MudItem xs="12" sm="6">
+                        <MudCheckBox T="bool" Value="@_selectedRoles.Contains(role.Id)"
+                                     ValueChanged="@((bool val) => ToggleRole(role.Id, val))"
+                                     Label="@role.Name" Color="Color.Primary" />
+                        @if (!string.IsNullOrEmpty(role.Description))
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="ml-8">
+                                @role.Description
+                            </MudText>
+                        }
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveAsync"
+                   Disabled="_saving">
+            @if (_saving)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Save Changes
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public Guid UserId { get; set; }
+
+    [Parameter]
+    public string UserEmail { get; set; } = string.Empty;
+
+    private bool _loading = true;
+    private bool _saving;
+    private List<RoleListResponse> _allRoles = new();
+    private HashSet<Guid> _selectedRoles = new();
+    private HashSet<Guid> _originalRoles = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Load all roles
+        var rolesResult = await RoleApiService.GetRolesAsync(new RoleListRequest { PageSize = 100 });
+        if (rolesResult.IsSuccess && rolesResult.Value != null)
+        {
+            _allRoles = rolesResult.Value.Items.ToList();
+        }
+
+        // Load user's current roles
+        var userRolesResult = await UserApiService.GetUserRolesAsync(UserId);
+        if (userRolesResult.IsSuccess && userRolesResult.Value != null)
+        {
+            _selectedRoles = userRolesResult.Value.Select(r => r.Id).ToHashSet();
+            _originalRoles = new HashSet<Guid>(_selectedRoles);
+        }
+
+        _loading = false;
+    }
+
+    private void ToggleRole(Guid roleId, bool selected)
+    {
+        if (selected)
+            _selectedRoles.Add(roleId);
+        else
+            _selectedRoles.Remove(roleId);
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+
+        // Find roles to add and remove
+        var rolesToAdd = _selectedRoles.Except(_originalRoles);
+        var rolesToRemove = _originalRoles.Except(_selectedRoles);
+
+        var hasErrors = false;
+
+        // Add new roles
+        foreach (var roleId in rolesToAdd)
+        {
+            var result = await UserApiService.AssignRoleAsync(UserId, roleId);
+            if (!result.IsSuccess)
+            {
+                Snackbar.Add($"Failed to assign role: {result.Error}", Severity.Error);
+                hasErrors = true;
+            }
+        }
+
+        // Remove old roles
+        foreach (var roleId in rolesToRemove)
+        {
+            var result = await UserApiService.RemoveRoleAsync(UserId, roleId);
+            if (!result.IsSuccess)
+            {
+                Snackbar.Add($"Failed to remove role: {result.Error}", Severity.Error);
+                hasErrors = true;
+            }
+        }
+
+        _saving = false;
+
+        if (!hasErrors)
+        {
+            Snackbar.Add("Roles updated successfully", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

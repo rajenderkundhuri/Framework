@@ -1,0 +1,336 @@
+@page "/settings"
+@attribute [Authorize]
+@inject ISystemApiService SystemApiService
+@inject ISnackbar Snackbar
+
+<PageTitle>System Settings</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">System Settings</MudText>
+
+<MudGrid>
+    <MudItem xs="12" md="6">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+                <MudText Typo="Typo.h6">
+                    <MudIcon Icon="@Icons.Material.Filled.Info" Class="mr-2" />
+                    System Information
+                </MudText>
+                <MudIconButton Icon="@Icons.Material.Filled.Refresh" OnClick="LoadSystemInfoAsync"
+                               Disabled="_loadingInfo" Size="Size.Small" />
+            </MudStack>
+
+            @if (_loadingInfo)
+            {
+                <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+            }
+            else if (_systemInfo != null)
+            {
+                <MudSimpleTable Dense="true" Hover="true" Bordered="true">
+                    <tbody>
+                        <tr>
+                            <td><strong>Application</strong></td>
+                            <td>@_systemInfo.ApplicationName</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Version</strong></td>
+                            <td>@_systemInfo.Version</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Environment</strong></td>
+                            <td>
+                                <MudChip T="string" Size="Size.Small"
+                                         Color="@(_systemInfo.Environment == "Production" ? Color.Error : Color.Warning)">
+                                    @_systemInfo.Environment
+                                </MudChip>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>.NET Version</strong></td>
+                            <td>@_systemInfo.DotNetVersion</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Machine Name</strong></td>
+                            <td>@_systemInfo.MachineName</td>
+                        </tr>
+                        <tr>
+                            <td><strong>OS</strong></td>
+                            <td>@_systemInfo.OsVersion</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Processors</strong></td>
+                            <td>@_systemInfo.ProcessorCount</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Start Time</strong></td>
+                            <td>@_systemInfo.StartTime.ToLocalTime().ToString("F")</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Working Memory</strong></td>
+                            <td>@FormatBytes(_systemInfo.WorkingSet)</td>
+                        </tr>
+                    </tbody>
+                </MudSimpleTable>
+            }
+            else
+            {
+                <MudAlert Severity="Severity.Warning">Unable to load system information</MudAlert>
+            }
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="6">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+                <MudText Typo="Typo.h6">
+                    <MudIcon Icon="@Icons.Material.Filled.HealthAndSafety" Class="mr-2" />
+                    Health Status
+                </MudText>
+                <MudIconButton Icon="@Icons.Material.Filled.Refresh" OnClick="LoadHealthStatusAsync"
+                               Disabled="_loadingHealth" Size="Size.Small" />
+            </MudStack>
+
+            @if (_loadingHealth)
+            {
+                <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+            }
+            else if (_healthReport != null)
+            {
+                <MudStack Spacing="2">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudText Typo="Typo.subtitle1">Overall Status:</MudText>
+                        <MudChip T="string" Size="Size.Small" Color="@GetHealthColor(_healthReport.Status)">
+                            @_healthReport.Status
+                        </MudChip>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                            (checked @_healthReport.Timestamp.ToLocalTime().ToString("T"))
+                        </MudText>
+                    </MudStack>
+
+                    @if (_healthReport.Entries.Any())
+                    {
+                        <MudSimpleTable Dense="true" Hover="true" Bordered="true">
+                            <thead>
+                                <tr>
+                                    <th>Check</th>
+                                    <th>Status</th>
+                                    <th>Duration</th>
+                                    <th>Description</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var entry in _healthReport.Entries)
+                                {
+                                    <tr>
+                                        <td>@entry.Name</td>
+                                        <td>
+                                            <MudChip T="string" Size="Size.Small" Color="@GetHealthColor(entry.Status)">
+                                                @entry.Status
+                                            </MudChip>
+                                        </td>
+                                        <td>@entry.Duration.TotalMilliseconds.ToString("F1") ms</td>
+                                        <td>@entry.Description</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </MudSimpleTable>
+                    }
+                    else
+                    {
+                        <MudAlert Severity="Severity.Info">No health checks configured</MudAlert>
+                    }
+                </MudStack>
+            }
+            else
+            {
+                <MudAlert Severity="Severity.Warning">Unable to load health status</MudAlert>
+            }
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="6">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudText Typo="Typo.h6" Class="mb-4">
+                <MudIcon Icon="@Icons.Material.Filled.Memory" Class="mr-2" />
+                Cache Management
+            </MudText>
+
+            <MudStack Spacing="2">
+                <MudButton Variant="Variant.Outlined" Color="Color.Warning" FullWidth="true"
+                           OnClick="ClearCacheAsync" Disabled="_clearingCache"
+                           StartIcon="@Icons.Material.Filled.DeleteSweep">
+                    @if (_clearingCache)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    }
+                    Clear All Cache
+                </MudButton>
+
+                <MudDivider Class="my-2" />
+
+                <MudTextField @bind-Value="_cachePattern" Label="Cache Pattern" Variant="Variant.Outlined"
+                              HelperText="Use * as wildcard (e.g., users:*)" Margin="Margin.Dense" />
+                <MudButton Variant="Variant.Outlined" Color="Color.Info" FullWidth="true"
+                           OnClick="ClearCacheByPatternAsync" Disabled="@(_clearingCachePattern || string.IsNullOrEmpty(_cachePattern))"
+                           StartIcon="@Icons.Material.Filled.FilterAlt">
+                    @if (_clearingCachePattern)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    }
+                    Clear by Pattern
+                </MudButton>
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="6">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudText Typo="Typo.h6" Class="mb-4">
+                <MudIcon Icon="@Icons.Material.Filled.Build" Class="mr-2" />
+                Maintenance
+            </MudText>
+
+            <MudStack Spacing="2">
+                <MudButton Variant="Variant.Outlined" Color="Color.Secondary" FullWidth="true"
+                           OnClick="ForceGarbageCollectionAsync" Disabled="_runningGc"
+                           StartIcon="@Icons.Material.Filled.CleaningServices">
+                    @if (_runningGc)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    }
+                    Force Garbage Collection
+                </MudButton>
+
+                @if (_gcInfo != null)
+                {
+                    <MudAlert Severity="Severity.Success" Dense="true">
+                        <MudText Typo="Typo.body2">
+                            Freed: @FormatBytes(_gcInfo.FreedBytes)
+                        </MudText>
+                        <MudText Typo="Typo.caption">
+                            Before: @FormatBytes(_gcInfo.BeforeBytes) | After: @FormatBytes(_gcInfo.AfterBytes)
+                        </MudText>
+                    </MudAlert>
+                }
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@code {
+    private bool _loadingInfo = true;
+    private bool _loadingHealth = true;
+    private bool _clearingCache;
+    private bool _clearingCachePattern;
+    private bool _runningGc;
+    private string _cachePattern = "";
+
+    private SystemInfoResponse? _systemInfo;
+    private HealthReportResponse? _healthReport;
+    private GcInfoResponse? _gcInfo;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Task.WhenAll(
+            LoadSystemInfoAsync(),
+            LoadHealthStatusAsync()
+        );
+    }
+
+    private async Task LoadSystemInfoAsync()
+    {
+        _loadingInfo = true;
+        var result = await SystemApiService.GetSystemInfoAsync();
+        if (result.IsSuccess)
+        {
+            _systemInfo = result.Value;
+        }
+        _loadingInfo = false;
+    }
+
+    private async Task LoadHealthStatusAsync()
+    {
+        _loadingHealth = true;
+        var result = await SystemApiService.GetHealthStatusAsync();
+        if (result.IsSuccess)
+        {
+            _healthReport = result.Value;
+        }
+        _loadingHealth = false;
+    }
+
+    private async Task ClearCacheAsync()
+    {
+        _clearingCache = true;
+        var result = await SystemApiService.ClearCacheAsync();
+        _clearingCache = false;
+
+        if (result.IsSuccess)
+        {
+            Snackbar.Add("Cache cleared successfully", Severity.Success);
+        }
+        else
+        {
+            Snackbar.Add(result.Error ?? "Failed to clear cache", Severity.Error);
+        }
+    }
+
+    private async Task ClearCacheByPatternAsync()
+    {
+        if (string.IsNullOrEmpty(_cachePattern)) return;
+
+        _clearingCachePattern = true;
+        var result = await SystemApiService.ClearCacheByPatternAsync(_cachePattern);
+        _clearingCachePattern = false;
+
+        if (result.IsSuccess)
+        {
+            Snackbar.Add($"Cache entries matching '{_cachePattern}' cleared", Severity.Success);
+            _cachePattern = "";
+        }
+        else
+        {
+            Snackbar.Add(result.Error ?? "Failed to clear cache", Severity.Error);
+        }
+    }
+
+    private async Task ForceGarbageCollectionAsync()
+    {
+        _runningGc = true;
+        var result = await SystemApiService.ForceGarbageCollectionAsync();
+        _runningGc = false;
+
+        if (result.IsSuccess)
+        {
+            _gcInfo = result.Value;
+            Snackbar.Add($"Garbage collection completed. Freed {FormatBytes(_gcInfo!.FreedBytes)}", Severity.Success);
+        }
+        else
+        {
+            Snackbar.Add(result.Error ?? "Failed to run garbage collection", Severity.Error);
+        }
+    }
+
+    private Color GetHealthColor(string status)
+    {
+        return status switch
+        {
+            "Healthy" => Color.Success,
+            "Degraded" => Color.Warning,
+            "Unhealthy" => Color.Error,
+            _ => Color.Default
+        };
+    }
+
+    private string FormatBytes(long bytes)
+    {
+        string[] sizes = { "B", "KB", "MB", "GB", "TB" };
+        int order = 0;
+        double size = bytes;
+        while (size >= 1024 && order < sizes.Length - 1)
+        {
+            order++;
+            size /= 1024;
+        }
+        return $"{size:0.##} {sizes[order]}";
+    }
+}

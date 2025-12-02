@@ -1,0 +1,209 @@
+@inject ILanguageApiService LanguageApiService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="4">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                <MudText Typo="Typo.h6">Supported Languages</MudText>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                           OnClick="OpenAddDialog" StartIcon="@Icons.Material.Filled.Add">
+                    Add Language
+                </MudButton>
+            </MudStack>
+
+            @if (_loading)
+            {
+                <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+            }
+            else
+            {
+                <MudTable Items="_languages" Dense="true" Hover="true" Elevation="0" Bordered="true">
+                    <HeaderContent>
+                        <MudTh>Language</MudTh>
+                        <MudTh>Culture</MudTh>
+                        <MudTh>Resources</MudTh>
+                        <MudTh>Status</MudTh>
+                        <MudTh>Actions</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Language">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                @if (!string.IsNullOrEmpty(context.FlagCode))
+                                {
+                                    <span class="fi fi-@context.FlagCode"></span>
+                                }
+                                <MudText>@context.DisplayName</MudText>
+                                @if (context.IsRtl)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Secondary">RTL</MudChip>
+                                }
+                            </MudStack>
+                        </MudTd>
+                        <MudTd DataLabel="Culture">@context.CultureName</MudTd>
+                        <MudTd DataLabel="Resources">@context.ResourceCount</MudTd>
+                        <MudTd DataLabel="Status">
+                            @if (context.IsDefault)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Primary">Default</MudChip>
+                            }
+                            else if (context.IsEnabled)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Success">Enabled</MudChip>
+                            }
+                            else
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Default">Disabled</MudChip>
+                            }
+                        </MudTd>
+                        <MudTd>
+                            <MudTooltip Text="Edit">
+                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                                               OnClick="@(() => OpenEditDialog(context))" />
+                            </MudTooltip>
+                            @if (!context.IsDefault)
+                            {
+                                <MudTooltip Text="Set as Default">
+                                    <MudIconButton Icon="@Icons.Material.Filled.Star" Size="Size.Small" Color="Color.Warning"
+                                                   OnClick="@(() => SetDefaultAsync(context))" />
+                                </MudTooltip>
+                                @if (context.IsEnabled)
+                                {
+                                    <MudTooltip Text="Disable">
+                                        <MudIconButton Icon="@Icons.Material.Filled.VisibilityOff" Size="Size.Small" Color="Color.Default"
+                                                       OnClick="@(() => DisableAsync(context))" />
+                                    </MudTooltip>
+                                }
+                                else
+                                {
+                                    <MudTooltip Text="Enable">
+                                        <MudIconButton Icon="@Icons.Material.Filled.Visibility" Size="Size.Small" Color="Color.Success"
+                                                       OnClick="@(() => EnableAsync(context))" />
+                                    </MudTooltip>
+                                }
+                            }
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Close">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    private bool _loading = true;
+    private List<LanguageResponse> _languages = new();
+    private bool _hasChanges;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadLanguagesAsync();
+    }
+
+    private async Task LoadLanguagesAsync()
+    {
+        _loading = true;
+        var result = await LanguageApiService.GetLanguagesAsync();
+        if (result.IsSuccess && result.Value != null)
+        {
+            _languages = result.Value.OrderBy(l => l.SortOrder).ThenBy(l => l.DisplayName).ToList();
+        }
+        _loading = false;
+    }
+
+    private async Task OpenAddDialog()
+    {
+        var dialog = await DialogService.ShowAsync<LanguageEditDialog>("Add Language");
+        var result = await dialog.Result;
+
+        if (result != null && !result.Canceled)
+        {
+            _hasChanges = true;
+            await LoadLanguagesAsync();
+            Snackbar.Add("Language added successfully", Severity.Success);
+        }
+    }
+
+    private async Task OpenEditDialog(LanguageResponse language)
+    {
+        var parameters = new DialogParameters { ["LanguageId"] = language.Id };
+        var dialog = await DialogService.ShowAsync<LanguageEditDialog>("Edit Language", parameters);
+        var result = await dialog.Result;
+
+        if (result != null && !result.Canceled)
+        {
+            _hasChanges = true;
+            await LoadLanguagesAsync();
+            Snackbar.Add("Language updated successfully", Severity.Success);
+        }
+    }
+
+    private async Task SetDefaultAsync(LanguageResponse language)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Set Default Language",
+            $"Are you sure you want to set '{language.DisplayName}' as the default language?",
+            yesText: "Set Default", cancelText: "Cancel");
+
+        if (confirmed == true)
+        {
+            var result = await LanguageApiService.SetDefaultLanguageAsync(language.Id);
+            if (result.IsSuccess)
+            {
+                _hasChanges = true;
+                await LoadLanguagesAsync();
+                Snackbar.Add("Default language updated", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add(result.Error ?? "Failed to set default language", Severity.Error);
+            }
+        }
+    }
+
+    private async Task EnableAsync(LanguageResponse language)
+    {
+        var result = await LanguageApiService.EnableLanguageAsync(language.Id);
+        if (result.IsSuccess)
+        {
+            _hasChanges = true;
+            await LoadLanguagesAsync();
+            Snackbar.Add("Language enabled", Severity.Success);
+        }
+        else
+        {
+            Snackbar.Add(result.Error ?? "Failed to enable language", Severity.Error);
+        }
+    }
+
+    private async Task DisableAsync(LanguageResponse language)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Disable Language",
+            $"Are you sure you want to disable '{language.DisplayName}'? This will hide it from users.",
+            yesText: "Disable", cancelText: "Cancel");
+
+        if (confirmed == true)
+        {
+            var result = await LanguageApiService.DisableLanguageAsync(language.Id);
+            if (result.IsSuccess)
+            {
+                _hasChanges = true;
+                await LoadLanguagesAsync();
+                Snackbar.Add("Language disabled", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add(result.Error ?? "Failed to disable language", Severity.Error);
+            }
+        }
+    }
+
+    private void Close() => MudDialog.Close(DialogResult.Ok(_hasChanges));
+}

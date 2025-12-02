@@ -1,0 +1,92 @@
+@inject IThemeService ThemeService
+
+<MudDrawer @bind-Open="@IsOpen" Anchor="Anchor.End" Elevation="1" Variant="DrawerVariant.Temporary" Width="320px">
+    <MudDrawerHeader>
+        <MudText Typo="Typo.h6">Theme Settings</MudText>
+        <MudSpacer />
+        <MudIconButton Icon="@Icons.Material.Filled.Close" OnClick="@(() => IsOpen = false)" />
+    </MudDrawerHeader>
+
+    <MudContainer Class="pa-4">
+        <MudText Typo="Typo.subtitle2" Class="mb-2">Mode</MudText>
+        <MudToggleGroup T="bool" Value="@ThemeService.IsDarkMode" ValueChanged="@OnDarkModeChanged" Class="mb-4" Style="width: 100%">
+            <MudToggleItem Value="false">
+                <MudStack Row AlignItems="AlignItems.Center" Spacing="1">
+                    <MudIcon Icon="@Icons.Material.Filled.LightMode" Size="Size.Small" />
+                    <MudText>Light</MudText>
+                </MudStack>
+            </MudToggleItem>
+            <MudToggleItem Value="true">
+                <MudStack Row AlignItems="AlignItems.Center" Spacing="1">
+                    <MudIcon Icon="@Icons.Material.Filled.DarkMode" Size="Size.Small" />
+                    <MudText>Dark</MudText>
+                </MudStack>
+            </MudToggleItem>
+        </MudToggleGroup>
+
+        <MudDivider Class="my-4" />
+
+        <MudText Typo="Typo.subtitle2" Class="mb-3">Color Presets</MudText>
+        <MudGrid Spacing="2">
+            @foreach (var theme in ThemeService.AvailableThemes)
+            {
+                <MudItem xs="4">
+                    <MudPaper Class="@GetThemeCardClass(theme.Name)"
+                              Style="cursor: pointer; position: relative;"
+                              Elevation="@(ThemeService.CurrentThemeName == theme.Name ? 4 : 1)"
+                              @onclick="@(() => SelectThemeAsync(theme.Name))">
+                        <div style="height: 60px; border-radius: 4px 4px 0 0; background: @theme.PrimaryColor;"></div>
+                        <div class="pa-2 d-flex justify-center align-center">
+                            <MudText Typo="Typo.caption">@theme.Name</MudText>
+                        </div>
+                        @if (ThemeService.CurrentThemeName == theme.Name)
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.Check"
+                                     Size="Size.Small"
+                                     Style="position: absolute; top: 4px; right: 4px; color: white;" />
+                        }
+                    </MudPaper>
+                </MudItem>
+            }
+        </MudGrid>
+
+        <MudDivider Class="my-4" />
+
+        <MudText Typo="Typo.subtitle2" Class="mb-2">Preview</MudText>
+        <MudPaper Class="pa-3" Elevation="1">
+            <MudStack Spacing="2">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" FullWidth>Primary Button</MudButton>
+                <MudButton Variant="Variant.Filled" Color="Color.Secondary" Size="Size.Small" FullWidth>Secondary Button</MudButton>
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" FullWidth>Outlined Button</MudButton>
+            </MudStack>
+        </MudPaper>
+    </MudContainer>
+</MudDrawer>
+
+@code {
+    [Parameter]
+    public bool IsOpen { get; set; }
+
+    [Parameter]
+    public EventCallback<bool> IsOpenChanged { get; set; }
+
+    private string GetThemeCardClass(string themeName)
+    {
+        return ThemeService.CurrentThemeName == themeName
+            ? "theme-card selected"
+            : "theme-card";
+    }
+
+    private async Task SelectThemeAsync(string themeName)
+    {
+        await ThemeService.SetThemeAsync(themeName);
+    }
+
+    private async Task OnDarkModeChanged(bool isDark)
+    {
+        if (isDark != ThemeService.IsDarkMode)
+        {
+            await ThemeService.ToggleDarkModeAsync();
+        }
+    }
+}

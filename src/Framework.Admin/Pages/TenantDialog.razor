@@ -1,0 +1,168 @@
+@inject ITenantApiService TenantApiService
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Business" Class="mr-2" />
+            @(TenantId.HasValue ? "Edit Tenant" : "Create Tenant")
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (_loading)
+        {
+            <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+        }
+        else
+        {
+            <MudForm @ref="_form" @bind-IsValid="_formValid">
+                <MudGrid>
+                    <MudItem xs="12">
+                        <MudTextField @bind-Value="_model.Name" Label="Name" Required="true"
+                                      RequiredError="Name is required" Variant="Variant.Outlined" />
+                    </MudItem>
+
+                    <MudItem xs="12">
+                        <MudTextField @bind-Value="_model.Identifier" Label="Identifier" Required="true"
+                                      RequiredError="Identifier is required" Variant="Variant.Outlined"
+                                      Disabled="@TenantId.HasValue"
+                                      HelperText="Unique identifier for the tenant (cannot be changed after creation)" />
+                    </MudItem>
+
+                    <MudItem xs="12">
+                        <MudTextField @bind-Value="_model.AdminEmail" Label="Admin Email"
+                                      Variant="Variant.Outlined" InputType="InputType.Email" />
+                    </MudItem>
+
+                    <MudItem xs="12">
+                        <MudTextField @bind-Value="_model.ConnectionString" Label="Connection String"
+                                      Variant="Variant.Outlined"
+                                      HelperText="Optional: Custom database connection string" />
+                    </MudItem>
+
+                    <MudItem xs="12">
+                        <MudDatePicker @bind-Date="_model.ValidUpto" Label="Valid Until"
+                                       Variant="Variant.Outlined" Clearable="true"
+                                       HelperText="Leave empty for no expiration" />
+                    </MudItem>
+
+                    @if (!TenantId.HasValue)
+                    {
+                        <MudItem xs="12">
+                            <MudCheckBox @bind-Value="_model.IsActive" Label="Active" Color="Color.Primary" />
+                        </MudItem>
+                    }
+                </MudGrid>
+            </MudForm>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SubmitAsync"
+                   Disabled="@(!_formValid || _saving)">
+            @if (_saving)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Save
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public Guid? TenantId { get; set; }
+
+    private MudForm? _form;
+    private bool _formValid;
+    private bool _loading = true;
+    private bool _saving;
+    private TenantModel _model = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (TenantId.HasValue)
+        {
+            var result = await TenantApiService.GetTenantByIdAsync(TenantId.Value);
+            if (result.IsSuccess && result.Value != null)
+            {
+                var tenant = result.Value;
+                _model = new TenantModel
+                {
+                    Name = tenant.Name,
+                    Identifier = tenant.Identifier,
+                    AdminEmail = tenant.AdminEmail,
+                    ConnectionString = tenant.ConnectionString,
+                    ValidUpto = tenant.ValidUpto?.DateTime,
+                    IsActive = tenant.IsActive
+                };
+            }
+        }
+
+        _loading = false;
+    }
+
+    private async Task SubmitAsync()
+    {
+        if (_form != null)
+        {
+            await _form.Validate();
+            if (!_formValid) return;
+        }
+
+        _saving = true;
+
+        if (TenantId.HasValue)
+        {
+            var updateRequest = new UpdateTenantRequest
+            {
+                Name = _model.Name,
+                AdminEmail = _model.AdminEmail,
+                ConnectionString = _model.ConnectionString,
+                ValidUpto = _model.ValidUpto.HasValue ? new DateTimeOffset(_model.ValidUpto.Value) : null
+            };
+
+            var result = await TenantApiService.UpdateTenantAsync(TenantId.Value, updateRequest);
+            _saving = false;
+
+            if (result.IsSuccess)
+            {
+                MudDialog.Close(DialogResult.Ok(true));
+            }
+        }
+        else
+        {
+            var createRequest = new CreateTenantRequest
+            {
+                Name = _model.Name,
+                Identifier = _model.Identifier,
+                AdminEmail = _model.AdminEmail,
+                ConnectionString = _model.ConnectionString,
+                ValidUpto = _model.ValidUpto.HasValue ? new DateTimeOffset(_model.ValidUpto.Value) : null,
+                IsActive = _model.IsActive
+            };
+
+            var result = await TenantApiService.CreateTenantAsync(createRequest);
+            _saving = false;
+
+            if (result.IsSuccess)
+            {
+                MudDialog.Close(DialogResult.Ok(true));
+            }
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private class TenantModel
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Identifier { get; set; } = string.Empty;
+        public string? AdminEmail { get; set; }
+        public string? ConnectionString { get; set; }
+        public DateTime? ValidUpto { get; set; }
+        public bool IsActive { get; set; } = true;
+    }
+}

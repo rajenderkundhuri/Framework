@@ -1,0 +1,75 @@
+@inherits LayoutComponentBase
+@inject IAuthService AuthService
+@inject IThemeService ThemeService
+@inject NavigationManager Navigation
+
+<MudLayout>
+    <MudAppBar Elevation="1">
+        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@ToggleDrawer" />
+        <MudText Typo="Typo.h6" Class="ml-3">Framework Admin</MudText>
+        <MudSpacer />
+        <AuthorizeView>
+            <Authorized>
+                <MudMenu Icon="@Icons.Material.Filled.Person" Color="Color.Inherit">
+                    <MudMenuItem>
+                        <MudText Typo="Typo.body2">@context.User.Identity?.Name</MudText>
+                    </MudMenuItem>
+                    <MudDivider />
+                    <MudMenuItem Href="/profile">Profile</MudMenuItem>
+                    <MudDivider />
+                    <MudMenuItem OnClick="LogoutAsync">Logout</MudMenuItem>
+                </MudMenu>
+            </Authorized>
+        </AuthorizeView>
+        <MudIconButton Icon="@(ThemeService.IsDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)"
+                       Color="Color.Inherit" OnClick="@ToggleDarkModeAsync"
+                       Title="@(ThemeService.IsDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode")" />
+        <MudIconButton Icon="@Icons.Material.Filled.Palette"
+                       Color="Color.Inherit" OnClick="@OpenThemeManager"
+                       Title="Theme Settings" />
+    </MudAppBar>
+
+    <MudDrawer @bind-Open="_drawerOpen" ClipMode="DrawerClipMode.Always" Elevation="2">
+        <MudDrawerHeader>
+            <MudText Typo="Typo.h6">Navigation</MudText>
+        </MudDrawerHeader>
+        <NavMenu />
+    </MudDrawer>
+
+    <MudMainContent>
+        <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="my-4">
+            @Body
+        </MudContainer>
+    </MudMainContent>
+</MudLayout>
+
+<ThemeManagerDrawer @bind-IsOpen="_themeDrawerOpen" />
+
+@code {
+    private bool _drawerOpen = true;
+    private bool _themeDrawerOpen;
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationState { get; set; }
+
+    private void ToggleDrawer()
+    {
+        _drawerOpen = !_drawerOpen;
+    }
+
+    private void OpenThemeManager()
+    {
+        _themeDrawerOpen = true;
+    }
+
+    private async Task ToggleDarkModeAsync()
+    {
+        await ThemeService.ToggleDarkModeAsync();
+    }
+
+    private async Task LogoutAsync()
+    {
+        await AuthService.LogoutAsync();
+        Navigation.NavigateTo("/login", true);
+    }
+}

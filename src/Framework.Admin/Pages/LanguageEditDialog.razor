@@ -1,0 +1,157 @@
+@inject ILanguageApiService LanguageApiService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="_form" @bind-IsValid="_isValid">
+            <MudGrid>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="_model.CultureName" Label="Culture Name" Required="true"
+                                  RequiredError="Culture name is required" Variant="Variant.Outlined"
+                                  Disabled="_isEdit" HelperText="e.g., en-US, fr-FR, de-DE" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="_model.FlagCode" Label="Flag Code" Variant="Variant.Outlined"
+                                  HelperText="ISO 2-letter country code (e.g., us, gb, fr)" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="_model.DisplayName" Label="Display Name" Required="true"
+                                  RequiredError="Display name is required" Variant="Variant.Outlined"
+                                  HelperText="e.g., English (United States)" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="_model.NativeName" Label="Native Name" Required="true"
+                                  RequiredError="Native name is required" Variant="Variant.Outlined"
+                                  HelperText="e.g., English, Deutsch, Francais" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudNumericField @bind-Value="_model.SortOrder" Label="Sort Order" Variant="Variant.Outlined"
+                                     HelperText="Order in language lists" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudCheckBox @bind-Value="_model.IsRtl" Label="Right-to-Left (RTL)" Color="Color.Primary" />
+                </MudItem>
+            </MudGrid>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" OnClick="Submit" Disabled="@(!_isValid || _saving)">
+            @if (_saving)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            @(_isEdit ? "Update" : "Add")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public Guid? LanguageId { get; set; }
+
+    private MudForm? _form;
+    private bool _isValid;
+    private bool _saving;
+    private bool _isEdit => LanguageId.HasValue;
+    private LanguageModel _model = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (_isEdit)
+        {
+            var result = await LanguageApiService.GetLanguagesAsync();
+            if (result.IsSuccess && result.Value != null)
+            {
+                var language = result.Value.FirstOrDefault(l => l.Id == LanguageId);
+                if (language != null)
+                {
+                    _model = new LanguageModel
+                    {
+                        CultureName = language.CultureName,
+                        DisplayName = language.DisplayName,
+                        NativeName = language.NativeName,
+                        FlagCode = language.FlagCode,
+                        IsRtl = language.IsRtl,
+                        SortOrder = language.SortOrder
+                    };
+                }
+            }
+        }
+    }
+
+    private async Task Submit()
+    {
+        if (_form != null)
+        {
+            await _form.Validate();
+            if (!_isValid) return;
+        }
+
+        _saving = true;
+
+        try
+        {
+            if (_isEdit)
+            {
+                var request = new UpdateLanguageRequest
+                {
+                    DisplayName = _model.DisplayName,
+                    NativeName = _model.NativeName,
+                    FlagCode = _model.FlagCode,
+                    IsRtl = _model.IsRtl,
+                    SortOrder = _model.SortOrder
+                };
+
+                var result = await LanguageApiService.UpdateLanguageAsync(LanguageId!.Value, request);
+                if (result.IsSuccess)
+                {
+                    MudDialog.Close(DialogResult.Ok(true));
+                }
+                else
+                {
+                    Snackbar.Add(result.Error ?? "Failed to update language", Severity.Error);
+                }
+            }
+            else
+            {
+                var request = new AddLanguageRequest
+                {
+                    CultureName = _model.CultureName,
+                    DisplayName = _model.DisplayName,
+                    NativeName = _model.NativeName,
+                    FlagCode = _model.FlagCode,
+                    IsRtl = _model.IsRtl,
+                    SortOrder = _model.SortOrder
+                };
+
+                var result = await LanguageApiService.AddLanguageAsync(request);
+                if (result.IsSuccess)
+                {
+                    MudDialog.Close(DialogResult.Ok(true));
+                }
+                else
+                {
+                    Snackbar.Add(result.Error ?? "Failed to add language", Severity.Error);
+                }
+            }
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private class LanguageModel
+    {
+        public string CultureName { get; set; } = string.Empty;
+        public string DisplayName { get; set; } = string.Empty;
+        public string NativeName { get; set; } = string.Empty;
+        public string? FlagCode { get; set; }
+        public bool IsRtl { get; set; }
+        public int SortOrder { get; set; }
+    }
+}
