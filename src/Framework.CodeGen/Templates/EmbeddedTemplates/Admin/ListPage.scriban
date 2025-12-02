@@ -1,0 +1,172 @@
+@page "/{{ route_path }}"
+@attribute [Authorize]
+@inject I{{ entity_name }}ApiService {{ entity_name }}ApiService
+{{~ for fk in foreign_keys ~}}
+@inject I{{ fk.related_entity_name }}ApiService {{ fk.related_entity_name }}ApiService
+{{~ end ~}}
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>{{ entity_plural }}</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">{{ entity_name }} Management</MudText>
+
+<MudPaper Class="pa-4" Elevation="2">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+        <MudStack Row="true" Spacing="2">
+            <MudTextField @bind-Value="_searchTerm" Placeholder="Search..." Variant="Variant.Outlined"
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                          Immediate="true" OnKeyUp="@(async e => { if (e.Key == "Enter") await LoadDataAsync(); })"
+                          Class="mr-2" Style="width: 300px;" />
+{{~ for fk in foreign_keys ~}}
+            <MudSelect T="Guid?" @bind-Value="_{{ fk.property_name | string.downcase }}Filter" Label="{{ fk.related_entity_name }}"
+                       Variant="Variant.Outlined" Dense="true" Class="mr-2" Style="width: 200px;" Clearable="true">
+                @foreach (var item in _{{ fk.variable_name }}List)
+                {
+                    <MudSelectItem T="Guid?" Value="@item.Id">@item.{{ fk.display_property }}</MudSelectItem>
+                }
+            </MudSelect>
+{{~ end ~}}
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="LoadDataAsync"
+                       StartIcon="@Icons.Material.Filled.Refresh">Search</MudButton>
+        </MudStack>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="OpenCreateDialog"
+                   StartIcon="@Icons.Material.Filled.Add">Add {{ entity_name }}</MudButton>
+    </MudStack>
+
+    <MudTable @ref="_table" T="{{ entity_name }}ListResponse" ServerData="@ServerReload" Dense="true" Hover="true"
+              Loading="_loading" LoadingProgressColor="Color.Primary">
+        <HeaderContent>
+{{~ for col in list_columns ~}}
+            <MudTh><MudTableSortLabel SortLabel="{{ col.name }}" T="{{ entity_name }}ListResponse">{{ col.display_name }}</MudTableSortLabel></MudTh>
+{{~ end ~}}
+            <MudTh>Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+{{~ for col in list_columns ~}}
+{{~ if col.type_name == "bool" ~}}
+            <MudTd DataLabel="{{ col.display_name }}">
+                @if (context.{{ col.name }})
+                {
+                    <MudIcon Icon="@Icons.Material.Filled.Check" Color="Color.Success" Size="Size.Small" />
+                }
+                else
+                {
+                    <MudIcon Icon="@Icons.Material.Filled.Close" Color="Color.Error" Size="Size.Small" />
+                }
+            </MudTd>
+{{~ else if col.type_name == "DateTimeOffset" || col.type_name == "DateTime" ~}}
+            <MudTd DataLabel="{{ col.display_name }}">@context.{{ col.name }}.ToLocalTime().ToString("g")</MudTd>
+{{~ else ~}}
+            <MudTd DataLabel="{{ col.display_name }}">@context.{{ col.name }}</MudTd>
+{{~ end ~}}
+{{~ end ~}}
+            <MudTd>
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                               OnClick="@(() => OpenEditDialog(context))" />
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                               OnClick="@(() => DeleteAsync(context))" />
+            </MudTd>
+        </RowTemplate>
+        <PagerContent>
+            <MudTablePager PageSizeOptions="new int[]{10, 25, 50, 100}" />
+        </PagerContent>
+    </MudTable>
+</MudPaper>
+
+@code {
+    private MudTable<{{ entity_name }}ListResponse>? _table;
+    private bool _loading;
+    private string _searchTerm = "";
+{{~ for fk in foreign_keys ~}}
+    private Guid? _{{ fk.property_name | string.downcase }}Filter;
+    private List<{{ fk.related_entity_name }}ListResponse> _{{ fk.variable_name }}List = new();
+{{~ end ~}}
+
+    protected override async Task OnInitializedAsync()
+    {
+{{~ for fk in foreign_keys ~}}
+        var {{ fk.variable_name }}Result = await {{ fk.related_entity_name }}ApiService.Get{{ fk.related_entity_plural_name }}Async(new {{ fk.related_entity_name }}ListRequest { PageSize = 1000 });
+        if ({{ fk.variable_name }}Result.IsSuccess && {{ fk.variable_name }}Result.Value != null)
+            _{{ fk.variable_name }}List = {{ fk.variable_name }}Result.Value.Items.ToList();
+{{~ end ~}}
+    }
+
+    private async Task<TableData<{{ entity_name }}ListResponse>> ServerReload(TableState state, CancellationToken token)
+    {
+        _loading = true;
+
+        var request = new {{ entity_name }}ListRequest
+        {
+            SearchTerm = _searchTerm,
+{{~ for fk in foreign_keys ~}}
+            {{ fk.property_name }} = _{{ fk.property_name | string.downcase }}Filter,
+{{~ end ~}}
+            PageNumber = state.Page + 1,
+            PageSize = state.PageSize,
+            SortBy = state.SortLabel ?? "CreatedAt",
+            SortDescending = state.SortDirection == SortDirection.Descending
+        };
+
+        var result = await {{ entity_name }}ApiService.Get{{ entity_plural }}Async(request);
+        _loading = false;
+
+        if (result.IsSuccess && result.Value != null)
+            return new TableData<{{ entity_name }}ListResponse> { Items = result.Value.Items, TotalItems = result.Value.TotalCount };
+
+        return new TableData<{{ entity_name }}ListResponse> { Items = Array.Empty<{{ entity_name }}ListResponse>(), TotalItems = 0 };
+    }
+
+    private async Task LoadDataAsync()
+    {
+        if (_table != null)
+            await _table.ReloadServerData();
+    }
+
+    private async Task OpenCreateDialog()
+    {
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<{{ entity_name }}Dialog>("Create {{ entity_name }}", options);
+        var result = await dialog.Result;
+        if (result != null && !result.Canceled)
+        {
+            await LoadDataAsync();
+            Snackbar.Add("{{ entity_name }} created successfully", Severity.Success);
+        }
+    }
+
+    private async Task OpenEditDialog({{ entity_name }}ListResponse item)
+    {
+        var parameters = new DialogParameters { ["{{ entity_name }}Id"] = item.Id };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<{{ entity_name }}Dialog>("Edit {{ entity_name }}", parameters, options);
+        var result = await dialog.Result;
+        if (result != null && !result.Canceled)
+        {
+            await LoadDataAsync();
+            Snackbar.Add("{{ entity_name }} updated successfully", Severity.Success);
+        }
+    }
+
+    private async Task DeleteAsync({{ entity_name }}ListResponse item)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Confirm Deletion",
+            $"Are you sure you want to delete this {{ entity_name | string.downcase }}?",
+            yesText: "Delete", cancelText: "Cancel");
+
+        if (confirmed == true)
+        {
+            var result = await {{ entity_name }}ApiService.Delete{{ entity_name }}Async(item.Id);
+            if (result.IsSuccess)
+            {
+                await LoadDataAsync();
+                Snackbar.Add("{{ entity_name }} deleted successfully", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add(result.Error ?? "Failed to delete {{ entity_name | string.downcase }}", Severity.Error);
+            }
+        }
+    }
+}

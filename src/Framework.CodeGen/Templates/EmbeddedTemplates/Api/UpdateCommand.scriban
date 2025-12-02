@@ -1,0 +1,14 @@
+using Framework.Application.Common.Commands;
+
+namespace {{ namespace }}.{{ entity_plural }}.Commands;
+
+/// <summary>
+/// Command to update an existing {{ entity_name }}
+/// </summary>
+public record Update{{ entity_name }}Command : Command
+{
+    public Guid Id { get; init; }
+{{~ for prop in update_properties ~}}
+    public {{ prop.type_name }}? {{ prop.name }} { get; init; }
+{{~ end ~}}
+}

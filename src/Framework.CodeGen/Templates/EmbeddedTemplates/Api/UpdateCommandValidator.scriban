@@ -1,0 +1,24 @@
+using FluentValidation;
+
+namespace {{ namespace }}.{{ entity_plural }}.Commands;
+
+/// <summary>
+/// Validator for Update{{ entity_name }}Command
+/// </summary>
+public class Update{{ entity_name }}CommandValidator : AbstractValidator<Update{{ entity_name }}Command>
+{
+    public Update{{ entity_name }}CommandValidator()
+    {
+        RuleFor(x => x.Id)
+            .NotEmpty().WithMessage("{{ entity_name }} ID is required");
+
+{{~ for prop in update_properties ~}}
+{{~ if prop.type_name == "string" && prop.max_length ~}}
+        RuleFor(x => x.{{ prop.name }})
+            .MaximumLength({{ prop.max_length }}).WithMessage("{{ prop.display_name }} must not exceed {{ prop.max_length }} characters")
+            .When(x => !string.IsNullOrEmpty(x.{{ prop.name }}));
+
+{{~ end ~}}
+{{~ end ~}}
+    }
+}

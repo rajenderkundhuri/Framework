@@ -1,0 +1,30 @@
+using FluentValidation;
+
+namespace {{ namespace }}.{{ entity_plural }}.Commands;
+
+/// <summary>
+/// Validator for Create{{ entity_name }}Command
+/// </summary>
+public class Create{{ entity_name }}CommandValidator : AbstractValidator<Create{{ entity_name }}Command>
+{
+    public Create{{ entity_name }}CommandValidator()
+    {
+{{~ for prop in create_properties ~}}
+{{~ if prop.is_required && prop.type_name == "string" ~}}
+        RuleFor(x => x.{{ prop.name }})
+            .NotEmpty().WithMessage("{{ prop.display_name }} is required"){{ if prop.max_length }}
+            .MaximumLength({{ prop.max_length }}).WithMessage("{{ prop.display_name }} must not exceed {{ prop.max_length }} characters"){{ end }};
+
+{{~ else if prop.is_required && prop.type_name == "Guid" ~}}
+        RuleFor(x => x.{{ prop.name }})
+            .NotEmpty().WithMessage("{{ prop.display_name }} is required");
+
+{{~ else if prop.type_name == "string" && prop.max_length ~}}
+        RuleFor(x => x.{{ prop.name }})
+            .MaximumLength({{ prop.max_length }}).WithMessage("{{ prop.display_name }} must not exceed {{ prop.max_length }} characters")
+            .When(x => !string.IsNullOrEmpty(x.{{ prop.name }}));
+
+{{~ end ~}}
+{{~ end ~}}
+    }
+}

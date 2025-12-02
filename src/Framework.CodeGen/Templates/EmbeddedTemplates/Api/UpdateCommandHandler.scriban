@@ -1,0 +1,45 @@
+using Framework.Application.Common.Commands;
+using Framework.Application.Common.Models;
+using Framework.Domain.Common.Interfaces;
+using {{ domain_namespace }};
+
+namespace {{ namespace }}.{{ entity_plural }}.Commands;
+
+/// <summary>
+/// Handler for Update{{ entity_name }}Command
+/// </summary>
+public class Update{{ entity_name }}CommandHandler : ICommandHandler<Update{{ entity_name }}Command>
+{
+    private readonly IRepository<{{ entity_name }}> _repository;
+    private readonly IUnitOfWork _unitOfWork;
+
+    public Update{{ entity_name }}CommandHandler(
+        IRepository<{{ entity_name }}> repository,
+        IUnitOfWork unitOfWork)
+    {
+        _repository = repository;
+        _unitOfWork = unitOfWork;
+    }
+
+    public async Task<Result> Handle(Update{{ entity_name }}Command request, CancellationToken cancellationToken)
+    {
+        var entity = await _repository.GetByIdAsync(request.Id, cancellationToken);
+
+        if (entity == null)
+        {
+            return Result.NotFound($"{{ entity_name }} with ID {request.Id} not found");
+        }
+
+{{~ for prop in update_properties ~}}
+        if (request.{{ prop.name }} != null)
+        {
+            entity.{{ prop.name }} = request.{{ prop.name }}{{ if !prop.is_nullable }}.Value{{ end }};
+        }
+{{~ end ~}}
+
+        _repository.Update(entity);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        return Result.Success();
+    }
+}

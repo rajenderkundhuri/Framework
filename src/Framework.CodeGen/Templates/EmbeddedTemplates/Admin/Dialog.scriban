@@ -1,0 +1,183 @@
+@inject I{{ entity_name }}ApiService {{ entity_name }}ApiService
+{{~ for fk in foreign_keys ~}}
+@inject I{{ fk.related_entity_name }}ApiService {{ fk.related_entity_name }}ApiService
+{{~ end ~}}
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Edit" Class="mr-2" />
+            @({{ entity_name }}Id.HasValue ? "Edit {{ entity_name }}" : "Create {{ entity_name }}")
+        </MudText>
+    </TitleContent>
+
+    <DialogContent>
+        @if (_loading)
+        {
+            <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+        }
+        else
+        {
+            <MudForm @ref="_form" @bind-IsValid="_formValid">
+                <MudGrid>
+{{~ for prop in form_properties ~}}
+{{~ if prop.is_foreign_key ~}}
+                    <MudItem xs="12" md="6">
+                        <MudSelect T="{{ prop.type_name }}{{ if prop.is_nullable }}?{{ end }}" @bind-Value="_model.{{ prop.name }}"
+                                   Label="{{ prop.display_name }}" Variant="Variant.Outlined"
+                                   {{ if prop.is_required }}Required="true" RequiredError="{{ prop.display_name }} is required"{{ end }}>
+                            @foreach (var item in _{{ prop.fk_info.variable_name }}List)
+                            {
+                                <MudSelectItem T="{{ prop.type_name }}{{ if prop.is_nullable }}?{{ end }}" Value="@item.Id">@item.{{ prop.fk_info.display_property }}</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+{{~ else if prop.type_name == "bool" ~}}
+                    <MudItem xs="12" md="6">
+                        <MudCheckBox T="bool" @bind-Value="_model.{{ prop.name }}" Label="{{ prop.display_name }}" Color="Color.Primary" />
+                    </MudItem>
+{{~ else if prop.type_name == "int" || prop.type_name == "long" || prop.type_name == "decimal" || prop.type_name == "double" || prop.type_name == "float" ~}}
+                    <MudItem xs="12" md="6">
+                        <MudNumericField T="{{ prop.type_name }}{{ if prop.is_nullable }}?{{ end }}" @bind-Value="_model.{{ prop.name }}"
+                                         Label="{{ prop.display_name }}" Variant="Variant.Outlined"
+                                         {{ if prop.is_required }}Required="true" RequiredError="{{ prop.display_name }} is required"{{ end }} />
+                    </MudItem>
+{{~ else if prop.type_name == "DateTime" || prop.type_name == "DateTimeOffset" ~}}
+                    <MudItem xs="12" md="6">
+                        <MudDatePicker @bind-Date="_model.{{ prop.name }}Date" Label="{{ prop.display_name }}" Variant="Variant.Outlined"
+                                       {{ if prop.is_required }}Required="true" RequiredError="{{ prop.display_name }} is required"{{ end }} />
+                    </MudItem>
+{{~ else if prop.max_length && prop.max_length > 255 ~}}
+                    <MudItem xs="12">
+                        <MudTextField @bind-Value="_model.{{ prop.name }}" Label="{{ prop.display_name }}" Variant="Variant.Outlined"
+                                      Lines="3" {{ if prop.is_required }}Required="true" RequiredError="{{ prop.display_name }} is required"{{ end }}
+                                      {{ if prop.max_length }}Counter="{{ prop.max_length }}" MaxLength="{{ prop.max_length }}"{{ end }} />
+                    </MudItem>
+{{~ else ~}}
+                    <MudItem xs="12" md="6">
+                        <MudTextField @bind-Value="_model.{{ prop.name }}" Label="{{ prop.display_name }}" Variant="Variant.Outlined"
+                                      {{ if prop.is_required }}Required="true" RequiredError="{{ prop.display_name }} is required"{{ end }}
+                                      {{ if prop.max_length }}Counter="{{ prop.max_length }}" MaxLength="{{ prop.max_length }}"{{ end }}
+                                      {{ if prop.input_type != "InputType.Text" }}InputType="{{ prop.input_type }}"{{ end }} />
+                    </MudItem>
+{{~ end ~}}
+{{~ end ~}}
+                </MudGrid>
+            </MudForm>
+        }
+    </DialogContent>
+
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SubmitAsync"
+                   Disabled="@(!_formValid || _saving)">
+            @if (_saving)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Save
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public Guid? {{ entity_name }}Id { get; set; }
+
+    private MudForm? _form;
+    private bool _formValid;
+    private bool _loading = true;
+    private bool _saving;
+    private {{ entity_name }}Model _model = new();
+{{~ for fk in foreign_keys ~}}
+    private List<{{ fk.related_entity_name }}ListResponse> _{{ fk.variable_name }}List = new();
+{{~ end ~}}
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Load lookup data
+{{~ for fk in foreign_keys ~}}
+        var {{ fk.variable_name }}Result = await {{ fk.related_entity_name }}ApiService.Get{{ fk.related_entity_plural_name }}Async(new {{ fk.related_entity_name }}ListRequest { PageSize = 1000 });
+        if ({{ fk.variable_name }}Result.IsSuccess && {{ fk.variable_name }}Result.Value != null)
+            _{{ fk.variable_name }}List = {{ fk.variable_name }}Result.Value.Items.ToList();
+{{~ end ~}}
+
+        // If editing, load existing data
+        if ({{ entity_name }}Id.HasValue)
+        {
+            var result = await {{ entity_name }}ApiService.Get{{ entity_name }}ByIdAsync({{ entity_name }}Id.Value);
+            if (result.IsSuccess && result.Value != null)
+            {
+                var entity = result.Value;
+                _model = new {{ entity_name }}Model
+                {
+{{~ for prop in form_properties ~}}
+                    {{ prop.name }} = entity.{{ prop.name }},
+{{~ end ~}}
+                };
+            }
+        }
+
+        _loading = false;
+    }
+
+    private async Task SubmitAsync()
+    {
+        if (_form != null)
+        {
+            await _form.Validate();
+            if (!_formValid) return;
+        }
+
+        _saving = true;
+
+        if ({{ entity_name }}Id.HasValue)
+        {
+            // Update
+            var request = new Update{{ entity_name }}Request
+            {
+{{~ for prop in update_properties ~}}
+                {{ prop.name }} = _model.{{ prop.name }},
+{{~ end ~}}
+            };
+
+            var result = await {{ entity_name }}ApiService.Update{{ entity_name }}Async({{ entity_name }}Id.Value, request);
+            _saving = false;
+
+            if (result.IsSuccess)
+            {
+                MudDialog.Close(DialogResult.Ok(true));
+            }
+        }
+        else
+        {
+            // Create
+            var request = new Create{{ entity_name }}Request
+            {
+{{~ for prop in create_properties ~}}
+                {{ prop.name }} = _model.{{ prop.name }},
+{{~ end ~}}
+            };
+
+            var result = await {{ entity_name }}ApiService.Create{{ entity_name }}Async(request);
+            _saving = false;
+
+            if (result.IsSuccess)
+            {
+                MudDialog.Close(DialogResult.Ok(true));
+            }
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private class {{ entity_name }}Model
+    {
+{{~ for prop in form_properties ~}}
+        public {{ prop.type_name }}{{ if prop.is_nullable }}?{{ end }} {{ prop.name }} { get; set; }{{ if prop.default_value }} = {{ prop.default_value }};{{ end }}
+{{~ end ~}}
+    }
+}

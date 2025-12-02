@@ -1,0 +1,16 @@
+namespace {{ namespace }}.{{ entity_plural }};
+
+/// <summary>
+/// Request DTO for {{ entity_name }} list with pagination and filtering
+/// </summary>
+public class {{ entity_name }}ListRequest
+{
+    public string? SearchTerm { get; set; }
+{{~ for prop in filter_properties ~}}
+    public {{ prop.type_name }}? {{ prop.name }} { get; set; }
+{{~ end ~}}
+    public int PageNumber { get; set; } = 1;
+    public int PageSize { get; set; } = 10;
+    public string SortBy { get; set; } = "CreatedAt";
+    public bool SortDescending { get; set; } = true;
+}

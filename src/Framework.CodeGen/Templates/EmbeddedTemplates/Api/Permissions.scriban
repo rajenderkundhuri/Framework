@@ -1,0 +1,6 @@
+
+    // {{ entity_plural }}
+    public const string {{ entity_plural }}View = "{{ entity_plural }}.View";
+    public const string {{ entity_plural }}Create = "{{ entity_plural }}.Create";
+    public const string {{ entity_plural }}Edit = "{{ entity_plural }}.Edit";
+    public const string {{ entity_plural }}Delete = "{{ entity_plural }}.Delete";

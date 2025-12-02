@@ -1,0 +1,91 @@
+using Framework.Api.Controllers;
+using Framework.Application.Common.Models;
+using Framework.Application.Identity;
+using {{ namespace }}.{{ entity_plural }};
+using {{ namespace }}.{{ entity_plural }}.Commands;
+using {{ namespace }}.{{ entity_plural }}.Queries;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+
+namespace Framework.Api.Controllers;
+
+/// <summary>
+/// {{ entity_name }} management endpoints
+/// </summary>
+[Authorize]
+public class {{ entity_plural }}Controller : ApiControllerBase
+{
+    /// <summary>
+    /// Get paginated list of {{ entity_plural | string.downcase }}
+    /// </summary>
+    [HttpGet]
+    [ProducesResponseType(typeof(PagedList<{{ entity_name }}ListResponse>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> Get{{ entity_plural }}([FromQuery] Get{{ entity_plural }}Query query)
+    {
+        if (!HasPermission(Permissions.{{ entity_plural }}View))
+            return Forbid();
+
+        var result = await Mediator.Send(query);
+        return HandleResult(result);
+    }
+
+    /// <summary>
+    /// Get {{ entity_name | string.downcase }} by ID
+    /// </summary>
+    [HttpGet("{id:guid}")]
+    [ProducesResponseType(typeof({{ entity_name }}DetailResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Get{{ entity_name }}(Guid id)
+    {
+        if (!HasPermission(Permissions.{{ entity_plural }}View))
+            return Forbid();
+
+        var result = await Mediator.Send(new Get{{ entity_name }}ByIdQuery { Id = id });
+        return HandleResult(result);
+    }
+
+    /// <summary>
+    /// Create a new {{ entity_name | string.downcase }}
+    /// </summary>
+    [HttpPost]
+    [ProducesResponseType(typeof(Guid), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Create{{ entity_name }}([FromBody] Create{{ entity_name }}Command command)
+    {
+        if (!HasPermission(Permissions.{{ entity_plural }}Create))
+            return Forbid();
+
+        var result = await Mediator.Send(command);
+        return HandleCreatedResult(result, nameof(Get{{ entity_name }}), new { id = result.Value });
+    }
+
+    /// <summary>
+    /// Update a {{ entity_name | string.downcase }}
+    /// </summary>
+    [HttpPut("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Update{{ entity_name }}(Guid id, [FromBody] Update{{ entity_name }}Command command)
+    {
+        if (!HasPermission(Permissions.{{ entity_plural }}Edit))
+            return Forbid();
+
+        var result = await Mediator.Send(command with { Id = id });
+        return HandleResult(result);
+    }
+
+    /// <summary>
+    /// Delete a {{ entity_name | string.downcase }}
+    /// </summary>
+    [HttpDelete("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Delete{{ entity_name }}(Guid id)
+    {
+        if (!HasPermission(Permissions.{{ entity_plural }}Delete))
+            return Forbid();
+
+        var result = await Mediator.Send(new Delete{{ entity_name }}Command { Id = id });
+        return HandleDeleteResult(result);
+    }
+}

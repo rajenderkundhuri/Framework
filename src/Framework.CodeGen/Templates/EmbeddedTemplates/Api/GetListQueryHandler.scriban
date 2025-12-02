@@ -1,0 +1,72 @@
+using Framework.Application.Common.Models;
+using Framework.Application.Common.Queries;
+using Framework.Domain.Common.Interfaces;
+using {{ domain_namespace }};
+using Microsoft.EntityFrameworkCore;
+
+namespace {{ namespace }}.{{ entity_plural }}.Queries;
+
+/// <summary>
+/// Handler for Get{{ entity_plural }}Query
+/// </summary>
+public class Get{{ entity_plural }}QueryHandler : IQueryHandler<Get{{ entity_plural }}Query, PagedList<{{ entity_name }}ListResponse>>
+{
+    private readonly IRepository<{{ entity_name }}> _repository;
+
+    public Get{{ entity_plural }}QueryHandler(IRepository<{{ entity_name }}> repository)
+    {
+        _repository = repository;
+    }
+
+    public async Task<Result<PagedList<{{ entity_name }}ListResponse>>> Handle(Get{{ entity_plural }}Query request, CancellationToken cancellationToken)
+    {
+        var query = _repository.Query();
+
+        // Apply search filter
+        if (!string.IsNullOrEmpty(request.SearchTerm))
+        {
+            var searchTerm = request.SearchTerm.ToLower();
+            query = query.Where(e =>
+{{~ for i, prop in search_properties ~}}
+                {{ if i > 0 }}|| {{ end }}(e.{{ prop.name }} != null && e.{{ prop.name }}.ToLower().Contains(searchTerm))
+{{~ end ~}}
+            );
+        }
+
+{{~ for prop in filter_properties ~}}
+        // Filter by {{ prop.name }}
+        if (request.{{ prop.name }}.HasValue)
+        {
+            query = query.Where(e => e.{{ prop.name }} == request.{{ prop.name }}.Value);
+        }
+
+{{~ end ~}}
+        // Get total count before pagination
+        var totalCount = await query.CountAsync(cancellationToken);
+
+        // Apply sorting
+        query = request.IsDescending
+            ? query.OrderByDescending(e => EF.Property<object>(e, request.OrderBy ?? "CreatedAt"))
+            : query.OrderBy(e => EF.Property<object>(e, request.OrderBy ?? "CreatedAt"));
+
+        // Apply pagination
+        var items = await query
+            .Skip((request.PageNumber - 1) * request.PageSize)
+            .Take(request.PageSize)
+            .Select(e => new {{ entity_name }}ListResponse
+            {
+                Id = e.Id,
+{{~ for prop in list_properties ~}}
+                {{ prop.name }} = e.{{ prop.name }},
+{{~ end ~}}
+{{~ if is_auditable ~}}
+                CreatedAt = e.CreatedAt,
+{{~ end ~}}
+            })
+            .ToListAsync(cancellationToken);
+
+        var pagedList = new PagedList<{{ entity_name }}ListResponse>(items, totalCount, request.PageNumber, request.PageSize);
+
+        return Result<PagedList<{{ entity_name }}ListResponse>>.Success(pagedList);
+    }
+}

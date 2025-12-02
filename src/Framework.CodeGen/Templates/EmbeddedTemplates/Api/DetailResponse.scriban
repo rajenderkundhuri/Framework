@@ -1,0 +1,21 @@
+namespace {{ namespace }}.{{ entity_plural }};
+
+/// <summary>
+/// Response DTO for {{ entity_name }} detail
+/// </summary>
+public class {{ entity_name }}DetailResponse
+{
+    public Guid Id { get; set; }
+{{~ for prop in list_properties ~}}
+    public {{ prop.type_name }}{{ if prop.is_nullable }}?{{ end }} {{ prop.name }} { get; set; }{{ if prop.default_value }} = {{ prop.default_value }};{{ end }}
+{{~ end ~}}
+{{~ for fk in foreign_keys ~}}
+    public string? {{ fk.related_entity_name }}Name { get; set; }
+{{~ end ~}}
+{{~ if is_auditable ~}}
+    public DateTimeOffset CreatedAt { get; set; }
+    public string? CreatedBy { get; set; }
+    public DateTimeOffset? LastModifiedAt { get; set; }
+    public string? LastModifiedBy { get; set; }
+{{~ end ~}}
+}

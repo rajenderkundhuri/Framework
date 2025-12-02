@@ -1,0 +1,11 @@
+using Framework.Application.Common.Queries;
+
+namespace {{ namespace }}.{{ entity_plural }}.Queries;
+
+/// <summary>
+/// Query to get a {{ entity_name }} by ID
+/// </summary>
+public record Get{{ entity_name }}ByIdQuery : Query<{{ entity_name }}DetailResponse>
+{
+    public Guid Id { get; init; }
+}

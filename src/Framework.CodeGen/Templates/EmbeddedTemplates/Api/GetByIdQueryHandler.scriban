@@ -1,0 +1,45 @@
+using Framework.Application.Common.Models;
+using Framework.Application.Common.Queries;
+using Framework.Domain.Common.Interfaces;
+using {{ domain_namespace }};
+
+namespace {{ namespace }}.{{ entity_plural }}.Queries;
+
+/// <summary>
+/// Handler for Get{{ entity_name }}ByIdQuery
+/// </summary>
+public class Get{{ entity_name }}ByIdQueryHandler : IQueryHandler<Get{{ entity_name }}ByIdQuery, {{ entity_name }}DetailResponse>
+{
+    private readonly IRepository<{{ entity_name }}> _repository;
+
+    public Get{{ entity_name }}ByIdQueryHandler(IRepository<{{ entity_name }}> repository)
+    {
+        _repository = repository;
+    }
+
+    public async Task<Result<{{ entity_name }}DetailResponse>> Handle(Get{{ entity_name }}ByIdQuery request, CancellationToken cancellationToken)
+    {
+        var entity = await _repository.GetByIdAsync(request.Id, cancellationToken);
+
+        if (entity == null)
+        {
+            return Result<{{ entity_name }}DetailResponse>.NotFound($"{{ entity_name }} with ID {request.Id} not found");
+        }
+
+        var response = new {{ entity_name }}DetailResponse
+        {
+            Id = entity.Id,
+{{~ for prop in list_properties ~}}
+            {{ prop.name }} = entity.{{ prop.name }},
+{{~ end ~}}
+{{~ if is_auditable ~}}
+            CreatedAt = entity.CreatedAt,
+            CreatedBy = entity.CreatedBy,
+            LastModifiedAt = entity.LastModifiedAt,
+            LastModifiedBy = entity.LastModifiedBy,
+{{~ end ~}}
+        };
+
+        return Result<{{ entity_name }}DetailResponse>.Success(response);
+    }
+}

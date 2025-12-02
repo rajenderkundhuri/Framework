@@ -1,0 +1,13 @@
+using Framework.Application.Common.Commands;
+
+namespace {{ namespace }}.{{ entity_plural }}.Commands;
+
+/// <summary>
+/// Command to create a new {{ entity_name }}
+/// </summary>
+public record Create{{ entity_name }}Command : Command<Guid>
+{
+{{~ for prop in create_properties ~}}
+    public {{ prop.type_name }}{{ if prop.is_nullable }}?{{ end }} {{ prop.name }} { get; init; }{{ if prop.default_value }} = {{ prop.default_value }};{{ end }}
+{{~ end ~}}
+}

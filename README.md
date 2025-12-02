@@ -21,6 +21,7 @@ Framework provides a robust foundation for building scalable, maintainable, and 
 | Validation | FluentValidation |
 | Mediator | MediatR |
 | Testing | xUnit, Shouldly, NSubstitute |
+| Code Generation | Scriban, Roslyn |
 
 ## Architecture
 
@@ -102,6 +103,13 @@ Framework provides a robust foundation for building scalable, maintainable, and 
 - **API Versioning** - Query, Header, URL Segment strategies
 - **Swagger/OpenAPI** - Interactive API documentation
 - **Result Pattern** - Consistent API responses
+
+### Code Generation CLI
+- **Entity Analysis** - Reflection and Roslyn source parsing
+- **Full Stack Generation** - API + Admin UI from entity definitions
+- **Foreign Key Detection** - Auto-generates dropdowns for relationships
+- **Customizable Templates** - Scriban-based templates
+- **CRUD Generation** - Commands, Queries, Handlers, Controllers, Blazor Pages
 
 ---
 
@@ -311,7 +319,8 @@ Framework/
 │   ├── Framework.Application/      # Use cases, DTOs, interfaces, validators
 │   ├── Framework.Infrastructure/   # EF Core, service implementations
 │   ├── Framework.Api/              # REST API, controllers, middleware
-│   └── Framework.Admin/            # Blazor WebAssembly Admin Panel
+│   ├── Framework.Admin/            # Blazor WebAssembly Admin Panel
+│   └── Framework.CodeGen/          # Code Generator CLI Tool
 ├── tests/
 │   ├── Framework.Domain.Tests/     # Domain unit tests
 │   ├── Framework.Application.Tests/# Application unit tests
@@ -364,6 +373,94 @@ Framework/
 6. **Access the applications**
    - API: `https://localhost:5001` (Swagger UI)
    - Admin Panel: `https://localhost:5002`
+
+---
+
+## Code Generator CLI (`fwgen`)
+
+The Framework includes a powerful code generator CLI tool that generates full-stack CRUD code from your entity definitions.
+
+### Installation
+
+```bash
+# Install as a global tool
+dotnet pack src/Framework.CodeGen
+dotnet tool install --global --add-source ./nupkg Framework.CodeGen
+
+# Or run directly without installing
+dotnet run --project src/Framework.CodeGen -- [commands]
+```
+
+### Usage
+
+```bash
+# Generate full-stack code using reflection (requires compiled DLL)
+fwgen generate -e Product -a ./bin/Debug/net9.0/Framework.Domain.dll -o ./src
+
+# Generate code using Roslyn source parsing
+fwgen generate -e ./src/Framework.Domain/Entities/Product.cs --source -o ./src
+
+# Generate API only (Commands, Queries, Handlers, Controller)
+fwgen generate -e Product -a ./path/to/assembly.dll --api-only
+
+# Generate Admin UI only (Blazor Pages, Services)
+fwgen generate -e Product -a ./path/to/assembly.dll --admin-only
+
+# Preview what would be generated (dry run)
+fwgen generate -e Product -a ./path/to/assembly.dll --dry-run
+
+# Initialize custom templates for customization
+fwgen init -o ./templates
+```
+
+### What It Generates
+
+**API Layer:**
+| File | Description |
+|------|-------------|
+| `Create{Entity}Command.cs` | Command for creating entities |
+| `Update{Entity}Command.cs` | Command for updating entities |
+| `Delete{Entity}Command.cs` | Command for deleting entities |
+| `*CommandHandler.cs` | Handlers for all commands |
+| `*CommandValidator.cs` | FluentValidation validators |
+| `Get{Entity}ByIdQuery.cs` | Query to get entity by ID |
+| `Get{Entities}Query.cs` | Paginated list query |
+| `*QueryHandler.cs` | Handlers for all queries |
+| `{Entity}ListResponse.cs` | DTO for list items |
+| `{Entity}DetailResponse.cs` | DTO for entity details |
+| `{Entities}Controller.cs` | API controller with CRUD endpoints |
+
+**Admin UI Layer:**
+| File | Description |
+|------|-------------|
+| `{Entity}ApiService.cs` | HTTP client service for API calls |
+| `{Entities}.razor` | List page with MudDataGrid |
+| `{Entity}Dialog.razor` | Create/Edit dialog with form |
+
+### Features
+
+- **Auto-detects foreign keys** - Generates dropdown selectors for relationships
+- **Smart property mapping** - Maps types to appropriate form controls
+- **MudDataGrid integration** - Server-side pagination, sorting, filtering
+- **Permission-based** - Generates permission constants for authorization
+- **Customizable templates** - Override default Scriban templates
+
+### CLI Options
+
+| Option | Description |
+|--------|-------------|
+| `-e, --entity` | Entity name or source file path (required) |
+| `-o, --output` | Output directory |
+| `-a, --assembly` | Path to compiled assembly (for reflection) |
+| `-s, --source` | Use Roslyn source parsing instead of reflection |
+| `-n, --namespace` | Custom namespace for generated code |
+| `--api-only` | Generate only API code |
+| `--admin-only` | Generate only Admin UI code |
+| `-f, --overwrite` | Overwrite existing files |
+| `--dry-run` | Preview without creating files |
+| `-t, --templates` | Path to custom templates directory |
+
+---
 
 ### Default Credentials
 
@@ -425,6 +522,7 @@ Detailed documentation is available in the `/docs` folder:
 - [Architecture Overview](docs/architecture.md)
 - [Developer Guide](docs/DeveloperGuide.md)
 - [Adding New Modules](docs/adding-new-module.md)
+- [Code Generator CLI](docs/code-generator.md)
 - [Coding Standards](docs/coding-standards.md)
 - [Testing Guide](docs/testing.md)
 - [API Layer](docs/api-layer.md)

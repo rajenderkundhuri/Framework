@@ -1,0 +1,14 @@
+using Framework.Application.Common.Queries;
+
+namespace {{ namespace }}.{{ entity_plural }}.Queries;
+
+/// <summary>
+/// Query to get paginated list of {{ entity_plural }}
+/// </summary>
+public record Get{{ entity_plural }}Query : PagedQuery<{{ entity_name }}ListResponse>
+{
+    public string? SearchTerm { get; init; }
+{{~ for prop in filter_properties ~}}
+    public {{ prop.type_name }}? {{ prop.name }} { get; init; }
+{{~ end ~}}
+}
