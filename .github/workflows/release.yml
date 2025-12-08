@@ -57,19 +57,19 @@ jobs:
       run: dotnet pack src/Framework.CodeGen/Framework.CodeGen.csproj -c Release -o ./publish/nupkg --no-build
 
     - name: Upload API artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: framework-api
         path: ./publish/api
 
     - name: Upload Admin artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: framework-admin
         path: ./publish/admin
 
     - name: Upload CodeGen NuGet package
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: framework-codegen
         path: ./publish/nupkg
